@@ -1,0 +1,77 @@
+COMPILE_DEPS = [
+    '//lib:CORE_DEPS',
+    '//lib:JACKSON',
+    '//lib:KRYO',
+    '//models/fpcagent:onos-models-fpcagent',
+    '//models/common:onos-models-common',
+    '//apps/config:onos-apps-config',
+    '//lib:onos-yang-model',
+    '//core/api:onos-api',
+    '//lib:javax.ws.rs-api',
+    '//utils/rest:onlab-rest',
+    '//core/store/serializers:onos-core-serializers',
+    ':zeromq',
+    ':json',
+]
+
+TEST_DEPS = [
+    '//lib:TEST_ADAPTERS',
+    '//lib:TEST_REST',
+    '//utils/osgi:onlab-osgi-tests',
+]
+
+BUNDLES = [
+    '//apps/fpcagent:onos-apps-fpcagent',
+]
+
+EXCLUDED_BUNDLES = [
+    ':zeromq',
+    ':json',
+]
+
+APPS = [
+    'org.onosproject.models.fpcagent',
+    'org.onosproject.yang',
+    'org.onosproject.yang-gui',
+    'org.onosproject.config',
+    'org.onosproject.restconf',
+    'org.onosproject.protocols.restconfserver',
+]
+
+osgi_jar_with_tests(
+    deps = COMPILE_DEPS,
+    test_deps = TEST_DEPS,
+    web_context = '/onos/fpcagent',
+    api_title = 'FPC Agent REST API',
+    api_package = 'org.onosproject.fpcagent.rest',
+    api_version = '1.0',
+    api_description = 'FPC Agent REST API',
+)
+
+onos_app(
+    app_name = 'org.onosproject.fpcagent',
+    title = 'YANG FPC Agent',
+    category = 'Traffic Steering',
+    url = 'http://onosproject.org',
+    description = 'FPC Agent YANG Application',
+    required_apps = APPS,
+    excluded_bundles = EXCLUDED_BUNDLES,
+)
+
+remote_jar (
+  name = 'json',
+  out = 'json-20090211.jar',
+  url = 'mvn:org.json:json:jar:20090211',
+  sha1 = 'c183aa3a2a6250293808bba12262c8920ce5a51c',
+  maven_coords = 'org.json:json:jar:NON-OSGI:20090211',
+  visibility = [ 'PUBLIC' ],
+)
+
+remote_jar (
+  name = 'zeromq',
+  out = 'jeromq-0.3.5.jar',
+  url = 'mvn:org.zeromq:jeromq:jar:0.3.5',
+  sha1 = '39a79082570d114bb5433762e836e4dd9c38b03d',
+  maven_coords = 'org.zeromq:jeromq:0.3.5',
+  visibility = [ 'PUBLIC' ],
+)
