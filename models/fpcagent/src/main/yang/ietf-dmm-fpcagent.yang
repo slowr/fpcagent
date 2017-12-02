@@ -415,8 +415,7 @@ module ietf-dmm-fpcagent {
 
     grouping result-body-dpn {
       leaf result {
-        type result;
-      }
+        type result;      }
       choice result-type {
         case err {
           leaf error-type-id {

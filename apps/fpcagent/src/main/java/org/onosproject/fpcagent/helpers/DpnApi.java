@@ -84,6 +84,7 @@ public class DpnApi {
             BigInteger opIdentifier,
             Long sessionId
     ) {
+        // TODO: check if subscriber is open.
         ByteBuffer bb = ByteBuffer.allocate(41)
                 .put(toUint8(dpn))
                 .put(CREATE_SESSION_TYPE)
@@ -425,6 +426,7 @@ public class DpnApi {
      * @return - ZMQ Topic
      */
     public static Short getTopicFromNode(String Key) {
+        if (Key == null) return 1;
         Short aShort = topicToNodeMap.get(Key);
         return aShort != null ? aShort : (short) 1;
     }

@@ -4,8 +4,8 @@ COMPILE_DEPS = [
     '//lib:KRYO',
     '//models/fpcagent:onos-models-fpcagent',
     '//models/common:onos-models-common',
-    '//apps/config:onos-apps-config',
     '//lib:onos-yang-model',
+    '//apps/config:onos-apps-config',
     '//core/api:onos-api',
     '//lib:javax.ws.rs-api',
     '//utils/rest:onlab-rest',
@@ -41,11 +41,6 @@ APPS = [
 osgi_jar_with_tests(
     deps = COMPILE_DEPS,
     test_deps = TEST_DEPS,
-    web_context = '/onos/fpcagent',
-    api_title = 'FPC Agent REST API',
-    api_package = 'org.onosproject.fpcagent.rest',
-    api_version = '1.0',
-    api_description = 'FPC Agent REST API',
 )
 
 onos_app(
