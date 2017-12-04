@@ -1,7 +1,7 @@
 package org.onosproject.fpcagent.workers;
 
 import org.apache.commons.lang.exception.ExceptionUtils;
-import org.onosproject.fpcagent.helpers.DpnApi;
+import org.onosproject.fpcagent.FpcUtil;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.yangautoprefixnotify.value.DownlinkDataNotification;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnId;
 import org.slf4j.Logger;
@@ -173,10 +173,10 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
          *
          * @param dpnStatus - DPN Status Indication message received from the DPN
          */
-        protected void sendHelloReply(DpnApi.DPNStatusIndication dpnStatus) {
-            if (DpnApi.getTopicFromNode(dpnStatus.getKey()) != null) {
+        protected void sendHelloReply(FpcUtil.DPNStatusIndication dpnStatus) {
+            if (FpcUtil.getTopicFromNode(dpnStatus.getKey()) != null) {
                 ByteBuffer bb = ByteBuffer.allocate(9 + nodeId.length() + networkId.length())
-                        .put(toUint8(DpnApi.getTopicFromNode(dpnStatus.getKey())))
+                        .put(toUint8(FpcUtil.getTopicFromNode(dpnStatus.getKey())))
                         .put(HELLO_REPLY)
                         .put(toUint8(ZMQSBSubscriberManager.getControllerTopic()))
                         .put(toUint32(ZMQSBSubscriberManager.getControllerSourceId()))
@@ -210,12 +210,13 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
                         }
                         break;
                     default:
-                        Map.Entry<FpcDpnId, Object> entry = DpnApi.decode(contents);
+                        Map.Entry<FpcDpnId, Object> entry = FpcUtil.decode(contents);
                         if (entry != null) {
                             if (entry.getValue() instanceof DownlinkDataNotification) {
-                            } else if (entry.getValue() instanceof DpnApi.DPNStatusIndication) {
-                                DpnApi.DPNStatusIndication dpnStatus = (DpnApi.DPNStatusIndication) entry.getValue();
-                                if (dpnStatus.getStatus() == DpnApi.DPNStatusIndication.Status.HELLO) {
+                                // TODO handle DL notification
+                            } else if (entry.getValue() instanceof FpcUtil.DPNStatusIndication) {
+                                FpcUtil.DPNStatusIndication dpnStatus = (FpcUtil.DPNStatusIndication) entry.getValue();
+                                if (dpnStatus.getStatus() == FpcUtil.DPNStatusIndication.Status.HELLO) {
                                     sendHelloReply(dpnStatus);
                                 }
                             }

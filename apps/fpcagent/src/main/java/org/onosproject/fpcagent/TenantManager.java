@@ -12,7 +12,8 @@ import org.onosproject.config.DynamicConfigEvent;
 import org.onosproject.config.DynamicConfigListener;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.config.Filter;
-import org.onosproject.fpcagent.helpers.DpnApi;
+import org.onosproject.fpcagent.helpers.DpnCommunicationService;
+import org.onosproject.fpcagent.helpers.DpnNgicCommunicator;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.IetfDmmFpcagentOpParam;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.*;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configure.DefaultConfigureOutput;
@@ -68,8 +69,12 @@ public class TenantManager implements TenantService {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private DynamicConfigService dynamicConfigService;
 
+    private DpnCommunicationService dpnCommunicationService;
+
     @Activate
     protected void activate() {
+        dpnCommunicationService = new DpnNgicCommunicator();
+
         dynamicConfigService.addListener(listener);
 
         // Create the Default Tenant on activate
@@ -233,7 +238,7 @@ public class TenantManager implements TenantService {
                         );
 
                         if (key.isPresent()) {
-                            Short dpnTopic = DpnApi.getTopicFromNode(key.get());
+                            Short dpnTopic = FpcUtil.getTopicFromNode(key.get());
 
                             if (dpnTopic != null) {
                                 if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
@@ -250,7 +255,7 @@ public class TenantManager implements TenantService {
 
                                 if (commands.contains("session")) {
                                     tasks.add(Executors.callable(() -> {
-                                        DpnApi.create_session(
+                                        dpnCommunicationService.create_session(
                                                 dpnTopic,
                                                 imsi,
                                                 Ip4Prefix.valueOf(context.delegatingIpPrefixes().get(0).toString()).address(),
@@ -269,11 +274,11 @@ public class TenantManager implements TenantService {
 
                                     if (commands.contains("downlink")) {
                                         tasks.add(Executors.callable(() -> {
-                                            DpnApi.modify_bearer_dl(
+                                            dpnCommunicationService.modify_bearer_dl(
                                                     dpnTopic,
-                                                    s1u_sgw_gtpu_teid,
                                                     dlRemoteAddress,
                                                     s1u_enb_gtpu_teid,
+                                                    s1u_sgw_gtpu_teid,
                                                     cId,
                                                     opId
                                             );
@@ -287,7 +292,7 @@ public class TenantManager implements TenantService {
                                     // TODO - Modify API for Indirect Forwarding to/from another SGW
                                 } else if (commands.contains("uplink")) {
                                     tasks.add(Executors.callable(() -> {
-                                        DpnApi.create_bearer_ul(
+                                        dpnCommunicationService.create_bearer_ul(
                                                 dpnTopic,
                                                 imsi,
                                                 lbi,
@@ -391,7 +396,7 @@ public class TenantManager implements TenantService {
                         );
 
                         if (key.isPresent()) {
-                            Short dpnTopic = DpnApi.getTopicFromNode(key.get());
+                            Short dpnTopic = FpcUtil.getTopicFromNode(key.get());
 
                             if (dpnTopic != null) {
                                 if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
@@ -408,19 +413,19 @@ public class TenantManager implements TenantService {
                                 if (commands.contains("downlink")) {
                                     if (context.dl().lifetime() >= 0L) {
                                         tasks.add(Executors.callable(() ->
-                                                DpnApi.modify_bearer_dl(
+                                                dpnCommunicationService.modify_bearer_dl(
                                                         dpnTopic,
                                                         dlRemoteAddress,
                                                         s1u_enb_gtpu_teid,
                                                         dlLocalAddress,
+                                                        contextId,
                                                         cId,
-                                                        opId,
-                                                        contextId
+                                                        opId
                                                 )
                                         ));
                                     } else {
                                         tasks.add(Executors.callable(() ->
-                                                DpnApi.delete_bearer(
+                                                dpnCommunicationService.delete_bearer(
                                                         dpnTopic,
                                                         s1u_enb_gtpu_teid
                                                 )
@@ -430,7 +435,7 @@ public class TenantManager implements TenantService {
                                 if (commands.contains("uplink")) {
                                     if (context.ul().lifetime() >= 0L) {
                                         tasks.add(Executors.callable(() ->
-                                                DpnApi.modify_bearer_ul(
+                                                dpnCommunicationService.modify_bearer_ul(
                                                         dpnTopic,
                                                         ulLocalAddress,
                                                         s1u_enb_gtpu_teid,
@@ -439,7 +444,7 @@ public class TenantManager implements TenantService {
                                         ));
                                     } else {
                                         tasks.add(Executors.callable(() ->
-                                                DpnApi.delete_bearer(
+                                                dpnCommunicationService.delete_bearer(
                                                         dpnTopic,
                                                         s1u_sgw_gtpu_teid
                                                 )
@@ -528,7 +533,7 @@ public class TenantManager implements TenantService {
                                     );
 
                                     if (key.isPresent()) {
-                                        Short dpnTopic = DpnApi.getTopicFromNode(key.get());
+                                        Short dpnTopic = FpcUtil.getTopicFromNode(key.get());
 
                                         if (dpnTopic != null) {
                                             Long teid;
@@ -543,7 +548,7 @@ public class TenantManager implements TenantService {
 
                                             if (targetStr.endsWith("ul") || targetStr.endsWith("dl")) {
                                                 tasks.add(Executors.callable(() -> {
-                                                    DpnApi.delete_bearer(
+                                                    dpnCommunicationService.delete_bearer(
                                                             dpnTopic,
                                                             teid
                                                     );
@@ -553,7 +558,7 @@ public class TenantManager implements TenantService {
                                                 }));
                                             } else {
                                                 tasks.add(Executors.callable(() -> {
-                                                    DpnApi.delete_session(
+                                                    dpnCommunicationService.delete_session(
                                                             dpnTopic,
                                                             context.lbi().uint8(),
                                                             teid,
