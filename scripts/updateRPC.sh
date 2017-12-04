@@ -45,7 +45,7 @@ curl -X POST --header 'Content-Type: application/json' -u onos:rocks --header 'A
         ],
         "op-id": "1",
         "op-ref-scope": "op",
-        "op-type": "create",
+        "op-type": "update",
         "session-state": "complete"
     }
 }' 'http://localhost:8181/onos/restconf/operations/ietf-dmm-fpcagent:configure' | python -m json.tool

@@ -36,7 +36,6 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.c
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configure.DefaultConfigureOutput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configuredpn.DefaultConfigureDpnInput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configuredpn.DefaultConfigureDpnOutput;
-import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opheader.OpTypeEnum;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.CreateOrUpdate;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.DeleteOrQuery;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.payload.Contexts;
@@ -132,7 +131,7 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
         fpcConfig.getConfig().ifPresent(
                 helper -> {
                     ZMQSBSubscriberManager.createInstance(
-                            helper.dpnListenerUri(),
+                            helper.dpnSubscriberUri(),
                             helper.zmqBroadcastAll(),
                             helper.zmqBroadcastControllers(),
                             helper.zmqBroadcastDpns(),
@@ -141,7 +140,7 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                     );
 
                     ZMQSBPublisherManager.createInstance(
-                            helper.dpnClientUri(),
+                            helper.dpnPublisherUri(),
                             helper.dpnClientThreads()
                     );
 
@@ -197,23 +196,18 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                 DefaultConfigureInput input = (DefaultConfigureInput) modelObject;
                 switch (input.opType()) {
                     case CREATE:
+                        configureOutput = tenantService.configureCreate(
+                                (CreateOrUpdate) input.opBody(),
+                                input.clientId(),
+                                input.opId()
+                        );
+                        break;
                     case UPDATE:
-                        if (input.opBody() instanceof CreateOrUpdate) {
-                            CreateOrUpdate createOrUpdate = (CreateOrUpdate) input.opBody();
-                            if (input.opType().equals(OpTypeEnum.CREATE)) {
-                                configureOutput = tenantService.configureCreate(
-                                        createOrUpdate,
-                                        input.clientId(),
-                                        input.opId()
-                                );
-                            } else {
-                                configureOutput = tenantService.configureUpdate(
-                                        createOrUpdate,
-                                        input.clientId(),
-                                        input.opId()
-                                );
-                            }
-                        }
+                        configureOutput = tenantService.configureUpdate(
+                                (CreateOrUpdate) input.opBody(),
+                                input.clientId(),
+                                input.opId()
+                        );
                         break;
                     case QUERY:
                         break;

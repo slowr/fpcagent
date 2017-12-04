@@ -50,6 +50,7 @@ public class ZMQSBPublisherManager implements AutoCloseable {
         executorService.submit(() -> {
             ZMQ.Socket socket = ctx.createSocket(ZMQ.PUB);
             socket.connect(address);
+            log.debug("Publisher at {}", address);
             while ((!Thread.currentThread().isInterrupted()) && run) {
                 try {
                     byte[] array = blockingQueue.take().array();

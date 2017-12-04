@@ -32,15 +32,7 @@ topicId = random.randrange(4,255)
 def signal_handler(signal, frame):
     print "\nExiting... Sending DPN Status Indication message with Status = GOODBYE"
     pub_socket.send("%s" % (struct.pack("!BBBBIB",2,12,topicId,2,source,len(nodeId)) + nodeId + struct.pack('!B',len(networkId)) + networkId))
-    count = 0
-    while True:
-        time.sleep(1)
-        sys.stdout.write("\r"+str(5-count)+" ")
-        sys.stdout.flush()
-        count += 1
-        if(count > 5):
-            print "\n"
-            sys.exit(0)
+    sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -70,18 +62,19 @@ def sendAssignId(pub_socket):
 
     print "Ready to receive messages. Press Ctrl+C when ready to exit."
 
-rec_port = "5560"
-send_port = "5559"
+subscriber_uri = "tcp://localhost:5560"
+publisher_uri = "tcp://localhost:5559"
 # Socket to talk to server
 context = zmq.Context()
-socket = context.socket(zmq.SUB)
+sub_socket = context.socket(zmq.SUB)
 pub_socket = context.socket(zmq.PUB)
-socket.connect ("tcp://localhost:%s" % rec_port)
-pub_socket.connect("tcp://localhost:%s" % send_port)
+sub_socket.connect(subscriber_uri)
+pub_socket.connect(publisher_uri)
 topicfilter = ""
 controller_topic= 252
-socket.setsockopt(zmq.SUBSCRIBE, topicfilter)
-print "Listening to port ", rec_port
+sub_socket.setsockopt(zmq.SUBSCRIBE, topicfilter)
+print "Subscriber to ", subscriber_uri
+print "Publisher to ", publisher_uri
 print "DPN Lifecycle start up . . . Please wait."
 
 async_result = pool.apply_async(sendAssignId,(pub_socket,))
@@ -94,11 +87,13 @@ msgnum4count = 0
 msgnum5count = 0
 msgnum6count = 0
 for update_nbr in range(900000):
-    string = socket.recv()
+    string = sub_socket.recv()
     ts = time.time()
     st = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
  
     topic,msgnum = struct.unpack('!BB',string[:2])
+
+    print 'received %s %s' % (topic, msgnum)
 
     if topic == 1 and msgnum == 10: #Assign_Id
         top,msg,topId,src,nodeIdLen = struct.unpack('!BBBIB',string[:8])
@@ -250,4 +245,4 @@ for update_nbr in range(900000):
 
     print '================'
     print 'Total = ', count, 'msgnum1 count', msgnum1count, 'msgnum2 count', msgnum2count, 'msgnum3 count', msgnum3count, 'msgnum4 count', msgnum4count,'msgnum5 count', msgnum5count, 'msgnum6 count', msgnum6count
-socket.close()
+sub_socket.close()

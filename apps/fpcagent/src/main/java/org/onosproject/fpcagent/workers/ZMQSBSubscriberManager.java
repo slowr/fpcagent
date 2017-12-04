@@ -84,10 +84,14 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
     public void open() {
         short subscriberId = (short) ThreadLocalRandom.current().nextInt(MIN_TOPIC_VAL, MAX_TOPIC_VAL + 1);
 
-        broadcastAllWorker = Executors.newSingleThreadExecutor().submit(new ZMQSubscriberWorker(broadcastAllId));
+        broadcastAllWorker = Executors.newSingleThreadExecutor()
+                .submit(new ZMQSubscriberWorker(broadcastAllId));
+
         broadcastControllersWorker = Executors.newSingleThreadExecutor()
                 .submit(new ZMQSubscriberWorker(broadcastControllersId));
-        broadcastTopicWorker = Executors.newSingleThreadExecutor().submit(new BroadcastTopic(subscriberId));
+
+        broadcastTopicWorker = Executors.newSingleThreadExecutor()
+                .submit(new BroadcastTopic(subscriberId));
     }
 
     @Override
@@ -191,11 +195,12 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
             ZMQ.Socket subscriber = this.ctx.createSocket(ZMQ.SUB);
             subscriber.connect(address);
             subscriber.subscribe(new byte[]{toUint8(subscriberId)});
+            log.debug("Subscriber at {} / {}", address, subscriberId);
             while ((!Thread.currentThread().isInterrupted()) && run) {
                 byte[] contents = subscriber.recv();
                 byte topic = contents[0];
                 byte messageType = contents[1];
-                log.info("Received {}", contents);
+                log.debug("Received {}", contents);
                 switch (topic) {
                     case 1:
                         if (messageType == ASSIGN_CONFLICT && toInt(contents, 3) != controllerSourceId) {
@@ -275,6 +280,7 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
                     .put(nodeId.getBytes())
                     .put(toUint8((short) networkId.length()))
                     .put(networkId.getBytes());
+
 
             log.info("sendHelloToDpns: {}", bb.array());
             ZMQSBPublisherManager.getInstance().send(bb);

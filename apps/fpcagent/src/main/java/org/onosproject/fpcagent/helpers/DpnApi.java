@@ -30,7 +30,7 @@ import static org.onosproject.fpcagent.helpers.Converter.*;
 public class DpnApi {
     protected static final Logger log = LoggerFactory.getLogger(DpnApi.class);
     private static final Map<String, FpcDpnId> uplinkDpnMap;
-    private static final Map<String, Short> topicToNodeMap;
+    private static final Map<String, Short> nodeToTopicMap;
     /**
      * Topic for broadcasting
      */
@@ -56,7 +56,7 @@ public class DpnApi {
 
     static {
         uplinkDpnMap = Maps.newConcurrentMap();
-        topicToNodeMap = Maps.newConcurrentMap();
+        nodeToTopicMap = Maps.newConcurrentMap();
     }
 
     /**
@@ -409,11 +409,11 @@ public class DpnApi {
             } else if (buf[3] == DPN_HELLO) {
                 status = DPNStatusIndication.Status.HELLO;
                 log.info("Hello {} on topic {}", key, buf[2]);
-                topicToNodeMap.put(key, (short) buf[2]);
+                nodeToTopicMap.put(key, (short) buf[2]);
             } else if (buf[3] == DPN_BYE) {
                 status = DPNStatusIndication.Status.BYE;
                 log.info("Bye {}", key);
-                topicToNodeMap.remove(key);
+                nodeToTopicMap.remove(key);
             }
             return new AbstractMap.SimpleEntry<>(uplinkDpnMap.get(key), new DPNStatusIndication(status, key));
         }
@@ -427,9 +427,8 @@ public class DpnApi {
      * @return - ZMQ Topic
      */
     public static Short getTopicFromNode(String Key) {
-        if (Key == null) return 1;
-        Short aShort = topicToNodeMap.get(Key);
-        return aShort != null ? aShort : (short) 1;
+        Short aShort = nodeToTopicMap.get(Key);
+        return aShort;
     }
 
     /**

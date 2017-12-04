@@ -197,10 +197,10 @@ public class TenantManager implements TenantService {
                 }
 
                 for (Dpns dpn : context.dpns()) {
-                    if (!getDefaultTenant().map(
-                            tenant -> tenant.fpcTopology().dpns() != null &&
+                    if (getDefaultTenant().map(
+                            tenant -> tenant.fpcTopology().dpns() == null ||
                                     tenant.fpcTopology().dpns().stream()
-                                            .anyMatch(dpns -> dpns.dpnId().equals(dpn.dpnId()))
+                                            .noneMatch(dpns -> dpns.dpnId().equals(dpn.dpnId()))
                     ).orElse(false)) {
                         throw new IllegalStateException("DPN ID is not registered to the topology.");
                     }
@@ -222,54 +222,70 @@ public class TenantManager implements TenantService {
                         short ebi = context.ebi().uint8(),
                                 lbi = context.lbi().uint8();
 
-                        Short dpnTopic = DpnApi.getTopicFromNode(dpn.dpnId().toString());
+                        Optional<String> key = getDefaultTenant().flatMap(tenant ->
+                                tenant.fpcTopology()
+                                        .dpns()
+                                        .stream()
+                                        .filter(dpns -> dpns.dpnId().equals(dpn.dpnId()))
+                                        .findFirst().map(node -> node.nodeId() + "/" + node.networkId())
+                        );
 
-                        if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
-                            s1u_sgw_gtpu_teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
-                        } else {
-                            throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
-                        }
-                        if (context.dl().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
-                            s1u_enb_gtpu_teid = ((ThreegppTunnel) context.dl().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
-                        } else {
-                            throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
-                        }
+                        if (key.isPresent()) {
+                            Short dpnTopic = DpnApi.getTopicFromNode(key.get());
+
+                            if (dpnTopic != null) {
+                                if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
+                                    s1u_sgw_gtpu_teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
+                                } else {
+                                    throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
+                                }
+                                if (context.dl().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
+                                    s1u_enb_gtpu_teid = ((ThreegppTunnel) context.dl().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
+                                } else {
+                                    throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
+                                }
 
 
-                        if (commands.contains("session")) {
-                            tasks.add(Executors.callable(() -> DpnApi.create_session(
-                                    dpnTopic,
-                                    imsi,
-                                    Ip4Prefix.valueOf(context.delegatingIpPrefixes().get(0).toString()).address(),
-                                    ebi,
-                                    ulLocalAddress,
-                                    s1u_sgw_gtpu_teid,
-                                    cId,
-                                    opId,
-                                    contextId
-                            )));
+                                if (commands.contains("session")) {
+                                    tasks.add(Executors.callable(() -> DpnApi.create_session(
+                                            dpnTopic,
+                                            imsi,
+                                            Ip4Prefix.valueOf(context.delegatingIpPrefixes().get(0).toString()).address(),
+                                            ebi,
+                                            ulLocalAddress,
+                                            s1u_sgw_gtpu_teid,
+                                            cId,
+                                            opId,
+                                            contextId
+                                    )));
 
-                            if (commands.contains("downlink")) {
-                                tasks.add(Executors.callable(() -> DpnApi.modify_bearer_dl(
-                                        dpnTopic,
-                                        s1u_sgw_gtpu_teid,
-                                        dlRemoteAddress,
-                                        s1u_enb_gtpu_teid,
-                                        cId,
-                                        opId
-                                )));
+                                    if (commands.contains("downlink")) {
+                                        tasks.add(Executors.callable(() -> DpnApi.modify_bearer_dl(
+                                                dpnTopic,
+                                                s1u_sgw_gtpu_teid,
+                                                dlRemoteAddress,
+                                                s1u_enb_gtpu_teid,
+                                                cId,
+                                                opId
+                                        )));
+                                    }
+                                } else if (commands.contains("indirect-forward")) {
+                                    // TODO - Modify API for Indirect Forwarding to/from another SGW
+                                } else if (commands.contains("uplink")) {
+                                    tasks.add(Executors.callable(() -> DpnApi.create_bearer_ul(
+                                            dpnTopic,
+                                            imsi,
+                                            lbi,
+                                            ebi,
+                                            ulLocalAddress,
+                                            s1u_sgw_gtpu_teid
+                                    )));
+                                }
+                            } else {
+                                throw new IllegalArgumentException("Could not find Topic ID");
                             }
-                        } else if (commands.contains("indirect-forward")) {
-                            // TODO - Modify API for Indirect Forwarding to/from another SGW
-                        } else if (commands.contains("uplink")) {
-                            tasks.add(Executors.callable(() -> DpnApi.create_bearer_ul(
-                                    dpnTopic,
-                                    imsi,
-                                    lbi,
-                                    ebi,
-                                    ulLocalAddress,
-                                    s1u_sgw_gtpu_teid
-                            )));
+                        } else {
+                            throw new IllegalArgumentException("DPN does not have node and network ID defined.");
                         }
                     }
                 }
@@ -295,6 +311,7 @@ public class TenantManager implements TenantService {
                     )
             );
         } catch (Exception e) {
+            log.error(ExceptionUtils.getFullStackTrace(e));
             DefaultErr defaultErr = new DefaultErr();
             configureOutput.resultType(defaultErr);
             defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
@@ -318,19 +335,21 @@ public class TenantManager implements TenantService {
                 defaultCommonSuccess.addToContexts(context);
 
                 if (getDefaultTenant().map(
-                        tenant -> tenant.fpcMobility()
-                                .contexts()
-                                .parallelStream()
-                                .anyMatch(contexts -> contexts.contextId().equals(context.contextId()))
+                        tenant -> tenant.fpcMobility().contexts() == null ||
+                                tenant.fpcMobility()
+                                        .contexts()
+                                        .parallelStream()
+                                        .noneMatch(contexts -> contexts.contextId().equals(context.contextId()))
                 ).orElse(false)) {
-                    throw new IllegalStateException("Context already exists.");
+                    throw new IllegalStateException("Context doesn't exist.");
                 }
 
                 for (Dpns dpn : context.dpns()) {
-                    if (!getDefaultTenant().map(
-                            tenant -> tenant.fpcTopology().dpns()
-                                    .stream()
-                                    .anyMatch(dpns -> dpns.dpnId().equals(dpn.dpnId()))
+                    if (getDefaultTenant().map(
+                            tenant -> tenant.fpcTopology().dpns() == null ||
+                                    tenant.fpcTopology().dpns()
+                                            .stream()
+                                            .noneMatch(dpns -> dpns.dpnId().equals(dpn.dpnId()))
                     ).orElse(false)) {
                         throw new IllegalStateException("DPN ID is not registered to the topology.");
                     }
@@ -349,61 +368,75 @@ public class TenantManager implements TenantService {
 
                         BigInteger opId = operationId.uint64();
 
+                        Optional<String> key = getDefaultTenant().flatMap(tenant ->
+                                tenant.fpcTopology()
+                                        .dpns()
+                                        .stream()
+                                        .filter(dpns -> dpns.dpnId().equals(dpn.dpnId()))
+                                        .findFirst().map(node -> node.nodeId() + "/" + node.networkId())
+                        );
 
-                        Short dpnTopic = DpnApi.getTopicFromNode(dpn.dpnId().toString());
+                        if (key.isPresent()) {
+                            Short dpnTopic = DpnApi.getTopicFromNode(key.get());
 
-                        if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
-                            s1u_sgw_gtpu_teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
-                        } else {
-                            throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
-                        }
-                        if (context.dl().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
-                            s1u_enb_gtpu_teid = ((ThreegppTunnel) context.dl().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
-                        } else {
-                            throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
-                        }
+                            if (dpnTopic != null) {
+                                if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
+                                    s1u_sgw_gtpu_teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
+                                } else {
+                                    throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
+                                }
+                                if (context.dl().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
+                                    s1u_enb_gtpu_teid = ((ThreegppTunnel) context.dl().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
+                                } else {
+                                    throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
+                                }
 
-
-                        if (commands.contains("downlink")) {
-                            if (context.dl().lifetime() >= 0L) {
-                                tasks.add(Executors.callable(() ->
-                                        DpnApi.modify_bearer_dl(
-                                                dpnTopic,
-                                                dlRemoteAddress,
-                                                s1u_enb_gtpu_teid,
-                                                dlLocalAddress,
-                                                cId,
-                                                opId,
-                                                contextId
-                                        )
-                                ));
+                                if (commands.contains("downlink")) {
+                                    if (context.dl().lifetime() >= 0L) {
+                                        tasks.add(Executors.callable(() ->
+                                                DpnApi.modify_bearer_dl(
+                                                        dpnTopic,
+                                                        dlRemoteAddress,
+                                                        s1u_enb_gtpu_teid,
+                                                        dlLocalAddress,
+                                                        cId,
+                                                        opId,
+                                                        contextId
+                                                )
+                                        ));
+                                    } else {
+                                        tasks.add(Executors.callable(() ->
+                                                DpnApi.delete_bearer(
+                                                        dpnTopic,
+                                                        s1u_enb_gtpu_teid
+                                                )
+                                        ));
+                                    }
+                                }
+                                if (commands.contains("uplink")) {
+                                    if (context.ul().lifetime() >= 0L) {
+                                        tasks.add(Executors.callable(() ->
+                                                DpnApi.modify_bearer_ul(
+                                                        dpnTopic,
+                                                        ulLocalAddress,
+                                                        s1u_enb_gtpu_teid,
+                                                        s1u_sgw_gtpu_teid
+                                                )
+                                        ));
+                                    } else {
+                                        tasks.add(Executors.callable(() ->
+                                                DpnApi.delete_bearer(
+                                                        dpnTopic,
+                                                        s1u_sgw_gtpu_teid
+                                                )
+                                        ));
+                                    }
+                                }
                             } else {
-                                tasks.add(Executors.callable(() ->
-                                        DpnApi.delete_bearer(
-                                                dpnTopic,
-                                                s1u_enb_gtpu_teid
-                                        )
-                                ));
+                                throw new IllegalArgumentException("Could not find Topic ID");
                             }
-                        }
-                        if (commands.contains("uplink")) {
-                            if (context.ul().lifetime() >= 0L) {
-                                tasks.add(Executors.callable(() ->
-                                        DpnApi.modify_bearer_ul(
-                                                dpnTopic,
-                                                ulLocalAddress,
-                                                s1u_enb_gtpu_teid,
-                                                s1u_sgw_gtpu_teid
-                                        )
-                                ));
-                            } else {
-                                tasks.add(Executors.callable(() ->
-                                        DpnApi.delete_bearer(
-                                                dpnTopic,
-                                                s1u_sgw_gtpu_teid
-                                        )
-                                ));
-                            }
+                        } else {
+                            throw new IllegalArgumentException("DPN does not have node and network ID defined.");
                         }
                     }
                 }
@@ -429,6 +462,7 @@ public class TenantManager implements TenantService {
                     )
             );
         } catch (Exception e) {
+            log.error(ExceptionUtils.getFullStackTrace(e));
             DefaultErr defaultErr = new DefaultErr();
             defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
             defaultErr.errorTypeId(ErrorTypeId.of(0));

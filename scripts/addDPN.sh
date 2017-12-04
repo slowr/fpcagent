@@ -1,3 +1,4 @@
+#!/bin/bash
 curl -i --header "Content-type: application/json" --request POST -u onos:rocks --data '{
     "dpns": [
         {
@@ -11,3 +12,4 @@ curl -i --header "Content-type: application/json" --request POST -u onos:rocks -
         }
     ]
 }' 'http://localhost:8181/onos/restconf/data/ietf-dmm-fpcagent:tenants/tenant=default/fpc-topology'
+./getTenants.sh
