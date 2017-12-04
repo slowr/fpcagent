@@ -18,227 +18,131 @@ import static org.onosproject.fpcagent.helpers.Converter.*;
  */
 public class DpnNgicCommunicator implements DpnCommunicationService {
     protected static final Logger log = LoggerFactory.getLogger(DpnNgicCommunicator.class);
-    /**
-     * Topic for broadcasting
-     */
-    private static byte BROADCAST_TOPIC = 0b0000_0000;
-    private static byte CREATE_SESSION_TYPE = 0b0000_0001;
-    private static byte MODIFY_DL_BEARER_TYPE = 0b0000_0010;
-    private static byte DELETE_SESSION_TYPE = 0b0000_0011;
-    private static byte MODIFY_UL_BEARER_TYPE = 0b0000_0100;
-    private static byte CREATE_UL_BEARER_TYPE = 0b0000_0101;
-    private static byte CREATE_DL_BEARER_TYPE = 0b0000_0110;
-    private static byte DELETE_BEARER_TYPE = 0b0000_0110;
-    private static byte HELLO = 0b0000_1000;
-    private static byte BYE = 0b0000_1001;
-    private static byte SEND_ADC_TYPE = 0b001_0001;
-    private static byte DDN_ACK = 0b0000_0110;
-
-    enum s11MsgType {
-        CREATE_SESSION(1),
-        MODIFY_BEARER(2),
-        DELETE_SESSION(3),
-        DPN_RESPONSE(4),
-        DDN(5),
-        ASSIGN_TOPIC(10),
-        ASSIGN_CONFLICT(11),
-        DPN_STATUS_INDICATION(12),
-        DPN_STATUS_ACK(13),
-        CONTROLLER_STATUS_INDICATION(14),
-        ADC_RULE(17),
-        PCC_RULE(18),
-        METER_RULE(19),
-        SDF_RULE(20);
-
-        private byte type;
-
-        s11MsgType(int type) {
-            this.type = (byte) type;
-        }
-
-        public byte getType() {
-            return type;
-        }
-    }
 
     @Override
     public void create_session(
-            Short topicId,
+            Short topic_id,
             BigInteger imsi,
-            Ip4Address ue_ip,
             Short default_ebi,
-            Ip4Address s1u_sgw_gtpu_ipv4,
-            Long s1u_sgw_gtpu_teid,
-            Long clientIdentifier,
-            BigInteger opIdentifier,
-            Long sessionId
+            Ip4Address ue_ipv4,
+            Long s1u_sgw_teid,
+            Ip4Address s1u_sgw_ipv4,
+            Long session_id,
+            Long client_id,
+            BigInteger op_id
     ) {
         /* NGIC Create Session expected buffer:
-            value: topic_id          bytes: 8
-            value: type              bytes: 8
-            value: imsi              bytes: 64
-            value: default_ebi       bytes: 8
-            value: ue_ipv4           bytes: 32
-            value: s1u_sgw_teid      bytes: 32
-            value: s1u_sgw_ipv4      bytes: 32
-            value: session_id        bytes: 64
-            value: controller_topic  bytes: 32
-            value: client_id         bytes: 32
-            value: op_id             bytes: 32
+            uint8_t topic_id;
+	        uint8_t type;
+            struct create_session_t {
+                uint64_t imsi;
+                uint8_t  default_ebi;
+                uint32_t ue_ipv4;
+                uint32_t s1u_sgw_teid;
+                uint32_t s1u_sgw_ipv4;
+                uint64_t session_id;
+                uint8_t  controller_topic;
+                uint32_t client_id;
+                uint32_t op_id;
+            } create_session_msg;
          */
         // TODO: check if subscriber is open.
         ByteBuffer bb = ByteBuffer.allocate(41)
-                .put(toUint8(topicId))
+                .put(toUint8(topic_id))
                 .put(s11MsgType.CREATE_SESSION.getType())
                 .put(toUint64(imsi))
                 .put(toUint8(default_ebi))
-                .put(toUint32(ue_ip.toInt()))
-                .put(toUint32(s1u_sgw_gtpu_teid))
-                .put(toUint32(s1u_sgw_gtpu_ipv4.toInt()))
-                .put(toUint64(BigInteger.valueOf(sessionId)))
+                .put(toUint32(ue_ipv4.toInt()))
+                .put(toUint32(s1u_sgw_teid))
+                .put(toUint32(s1u_sgw_ipv4.toInt()))
+                .put(toUint64(BigInteger.valueOf(session_id)))
                 .put(toUint8(ZMQSBSubscriberManager.getControllerTopic()))
-                .put(toUint32(clientIdentifier))
-                .put(toUint32(opIdentifier.longValue()));
+                .put(toUint32(client_id))
+                .put(toUint32(op_id.longValue()));
 
         log.info("create_session: {}", bb.array());
         ZMQSBPublisherManager.getInstance().send(bb);
     }
 
     @Override
-    public void delete_session(
-            Short dpn,
-            Short del_default_ebi,
-            Long s1u_sgw_gtpu_teid,
-            Long clientIdentifier,
-            BigInteger opIdentifier,
-            Long sessionId
+    public void modify_bearer(
+            Short topic_id,
+            Ip4Address s1u_sgw_ipv4,
+            Long s1u_enodeb_teid,
+            Ip4Address s1u_enodeb_ipv4,
+            Long session_id,
+            Long client_id,
+            BigInteger op_id
     ) {
-        ByteBuffer bb = ByteBuffer.allocate(19)
-                .put(toUint8(dpn))
-                .put(s11MsgType.DELETE_SESSION.getType())
-                .put(toUint64(BigInteger.valueOf(sessionId)))
+        /*
+           NGIC Modify Session expected buffer:
+           	uint8_t topic_id;
+	        uint8_t type;
+	        struct modify_bearer_t {
+			    uint32_t s1u_sgw_ipv4;
+			    uint32_t s1u_enodeb_teid;
+			    uint32_t s1u_enodeb_ipv4;
+			    uint64_t session_id;
+			    uint8_t  controller_topic;
+			    uint32_t client_id;
+			    uint32_t op_id;
+		    } modify_bearer_msg;
+         */
+        ByteBuffer bb = ByteBuffer.allocate(32)
+                .put(toUint8(topic_id))
+                .put(s11MsgType.MODIFY_BEARER.getType())
+                .put(toUint32(s1u_sgw_ipv4.toInt()))
+                .put(toUint32(s1u_enodeb_teid))
+                .put(toUint32(s1u_enodeb_ipv4.toInt()))
+                .put(toUint64(BigInteger.valueOf(session_id)))
                 .put(toUint8(ZMQSBSubscriberManager.getControllerTopic()))
-                .put(toUint32(clientIdentifier))
-                .put(toUint32(opIdentifier.longValue()));
+                .put(toUint32(client_id))
+                .put(toUint32(op_id.longValue()));
+
+        log.info("modify_bearer: {}", bb.array());
+        ZMQSBPublisherManager.getInstance().send(bb);
+    }
+
+    @Override
+    public void delete_session(
+            Short topic_id,
+            Long session_id,
+            Long client_id,
+            BigInteger op_id
+    ) {
+        /*
+            NGIC Delete Session expected buffer:
+            uint8_t topic_id;
+	        uint8_t type;
+            struct delete_session_t {
+			    uint64_t session_id;
+			    uint8_t  controller_topic;
+			    uint32_t client_id;
+			    uint32_t op_id;
+		    } delete_session_msg;
+         */
+        ByteBuffer bb = ByteBuffer.allocate(19)
+                .put(toUint8(topic_id))
+                .put(s11MsgType.DELETE_SESSION.getType())
+                .put(toUint64(BigInteger.valueOf(session_id)))
+                .put(toUint8(ZMQSBSubscriberManager.getControllerTopic()))
+                .put(toUint32(client_id))
+                .put(toUint32(op_id.longValue()));
 
         log.info("delete_session: {}", bb.array());
         ZMQSBPublisherManager.getInstance().send(bb);
     }
 
+
     @Override
-    public void create_bearer_ul(
-            Short dpn,
-            BigInteger imsi,
-            Short default_ebi,
-            Short dedicated_ebi,
-            Ip4Address s1u_sgw_gtpu_ipv4,
-            Long s1u_sgw_gtpu_teid
+    public void send_ADC_rules(
+            Short topic,
+            String domain_name,
+            String ip,
+            Short drop,
+            Long rating_group,
+            Long service_ID, String sponsor_ID
     ) {
-        ByteBuffer bb = ByteBuffer.allocate(21)
-                .put(toUint8(dpn))
-                .put(CREATE_UL_BEARER_TYPE)
-                .put(toUint64(imsi))
-                .put(toUint8(default_ebi))
-                .put(toUint8(dedicated_ebi))
-                .put(toUint32(s1u_sgw_gtpu_ipv4.toInt()))
-                .put(toUint32(s1u_sgw_gtpu_teid));
-
-        log.info("create_bearer_ul: {}", bb.array());
-        ZMQSBPublisherManager.getInstance().send(bb);
-    }
-
-    @Override
-    public void create_bearer_dl(
-            Short dpn,
-            Short dedicated_ebi,
-            Long s1u_sgw_gtpu_teid,
-            Ip4Address s1u_enb_gtpu_ipv4,
-            Long s1u_enb_gtpu_teid
-    ) {
-        ByteBuffer bb = ByteBuffer.allocate(16)
-                .put(toUint8(dpn))
-                .put(CREATE_DL_BEARER_TYPE)
-                .put(toUint8(dedicated_ebi))
-                .put(toUint32(s1u_sgw_gtpu_teid))
-                .put(toUint32(s1u_enb_gtpu_ipv4.toInt()))
-                .put(toUint32(s1u_enb_gtpu_teid));
-
-        log.info("create_bearer_dl: {}", bb.array());
-        ZMQSBPublisherManager.getInstance().send(bb);
-    }
-
-    @Override
-    public void modify_bearer_dl(
-            Short topicId,
-            Ip4Address s1u_enodeb_ipv4,
-            Long s1u_enodeb_teid,
-            Ip4Address s1u_sgw_ipv4,
-            Long sessionId,
-            Long clientId,
-            BigInteger opId
-    ) {
-        /* NGIC Modify Session expected buffer:
-            value: topic_id          bytes: 8
-            value: type              bytes: 8
-            value: s1u_enodeb_ipv4   bytes: 32
-            value: s1u_enodeb_teid   bytes: 32
-            value: s1u_sgw_ipv4      bytes: 32
-            value: session_id        bytes: 64
-            value: controller_topic  bytes: 8
-            value: client_id         bytes: 32
-            value: op_id             bytes: 32
-         */
-        ByteBuffer bb = ByteBuffer.allocate(32)
-                .put(toUint8(topicId))
-                .put(MODIFY_DL_BEARER_TYPE)
-                .put(toUint32(s1u_sgw_ipv4.toInt()))
-                .put(toUint32(s1u_enodeb_teid))
-                .put(toUint32(s1u_enodeb_ipv4.toInt()))
-                .put(toUint64(BigInteger.valueOf(sessionId)))
-                .put(toUint8(ZMQSBSubscriberManager.getControllerTopic()))
-                .put(toUint32(clientId))
-                .put(toUint32(opId.longValue()));
-
-        log.info("modify_bearer_dl: {}", bb.array());
-        ZMQSBPublisherManager.getInstance().send(bb);
-    }
-
-    @Override
-    public void modify_bearer_ul(
-            Short dpn,
-            Ip4Address s1u_enb_gtpu_ipv4,
-            Long s1u_enb_gtpu_teid,
-            Long s1u_sgw_gtpu_teid
-    ) {
-        ByteBuffer bb = ByteBuffer.allocate(15)
-                .put(toUint8(dpn))
-                .put(MODIFY_UL_BEARER_TYPE)
-                .put(toUint32(s1u_enb_gtpu_ipv4.toInt()))
-                .put(toUint32(s1u_enb_gtpu_teid))
-                .put(toUint32(s1u_sgw_gtpu_teid));
-
-        log.info("modify_bearer_ul: {}", bb.array());
-        ZMQSBPublisherManager.getInstance().send(bb);
-    }
-
-    @Override
-    public void delete_bearer(
-            Short dpnTopic,
-            Long s1u_sgw_gtpu_teid) {
-        ByteBuffer bb = ByteBuffer.allocate(7)
-                .put(toUint8(dpnTopic))
-                .put(DELETE_BEARER_TYPE)
-                .put(toUint32(s1u_sgw_gtpu_teid));
-
-        log.info("delete_bearer: {}", bb.array());
-        ZMQSBPublisherManager.getInstance().send(bb);
-    }
-
-    @Override
-    public void send_ADC_rules(Short topic,
-                               String domain_name, String ip,
-                               Short drop, Long rating_group,
-                               Long service_ID, String sponsor_ID) {
         Ip4Prefix ip_prefix = null;
         if (ip != null) {
             ip_prefix = Ip4Prefix.valueOf(ip);
@@ -250,7 +154,7 @@ public class DpnNgicCommunicator implements DpnCommunicationService {
         }
         ByteBuffer bb = ByteBuffer.allocate(200);
         bb.put(toUint8(topic))
-                .put(SEND_ADC_TYPE)
+                .put(s11MsgType.ADC_RULE.getType())
                 .put(toUint8(selector_type));
         if (selector_type == 0) {
             bb.put(toUint8((short) domain_name.length()))
@@ -277,5 +181,35 @@ public class DpnNgicCommunicator implements DpnCommunicationService {
 
         log.info("send_ADC_rules: {}", bb.array());
         ZMQSBPublisherManager.getInstance().send(bb);
+    }
+
+    /**
+     * Following the NGIC message types.
+     */
+    enum s11MsgType {
+        CREATE_SESSION(1),
+        MODIFY_BEARER(2),
+        DELETE_SESSION(3),
+        DPN_RESPONSE(4),
+        DDN(5),
+        ASSIGN_TOPIC(10),
+        ASSIGN_CONFLICT(11),
+        DPN_STATUS_INDICATION(12),
+        DPN_STATUS_ACK(13),
+        CONTROLLER_STATUS_INDICATION(14),
+        ADC_RULE(17),
+        PCC_RULE(18),
+        METER_RULE(19),
+        SDF_RULE(20);
+
+        private byte type;
+
+        s11MsgType(int type) {
+            this.type = (byte) type;
+        }
+
+        public byte getType() {
+            return type;
+        }
     }
 }

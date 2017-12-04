@@ -23,128 +23,48 @@ import java.math.BigInteger;
 public interface DpnCommunicationService {
     /**
      * Creates Mobility Session
-     *
-     * @param topicId           - DPN
+     *  @param topicId           - DPN
      * @param imsi              - IMSI
-     * @param ue_ip             - Session IP Address
      * @param default_ebi       - Default EBI
-     * @param s1u_sgw_gtpu_ipv4 - SGW GTP-U IPv4 Address
-     * @param s1u_sgw_gtpu_teid - SGW GTP-U TEID
-     * @param clientIdentifier  - Client Identifier
-     * @param opIdentifier      - Operation Identifier
-     * @param sessionId         - Session Id
      */
     void create_session(
             Short topicId,
             BigInteger imsi,
-            Ip4Address ue_ip,
-            Short default_ebi,
-            Ip4Address s1u_sgw_gtpu_ipv4,
-            Long s1u_sgw_gtpu_teid,
-            Long clientIdentifier,
-            BigInteger opIdentifier,
-            Long sessionId
-    );
-
-    /**
-     * DeleteOrQuery Mobility Session.
-     *
-     * @param dpn               - DPN
-     * @param del_default_ebi   - Default EBI
-     * @param s1u_sgw_gtpu_teid - SGW GTP-U TEID
-     * @param clientIdentifier  - Client Identifier
-     * @param opIdentifier      - Operation Identifier
-     * @param sessionId         - Session Id
-     */
-    void delete_session(
-            Short dpn,
-            Short del_default_ebi,
-            Long s1u_sgw_gtpu_teid,
-            Long clientIdentifier,
-            BigInteger opIdentifier,
-            Long sessionId
-    );
-
-    /**
-     * Create Uplink Bearer.
-     *
-     * @param dpn               - DPN
-     * @param imsi              - IMSI
-     * @param default_ebi       - Default EBI
-     * @param dedicated_ebi     - Dedicated EBI
-     * @param s1u_sgw_gtpu_ipv4 - SGW GTP-U IPv4 Address
-     * @param s1u_sgw_gtpu_teid - SGW GTP-U TEID
-     */
-    void create_bearer_ul(
-            Short dpn,
-            BigInteger imsi,
-            Short default_ebi,
-            Short dedicated_ebi,
-            Ip4Address s1u_sgw_gtpu_ipv4,
-            Long s1u_sgw_gtpu_teid
-    );
-
-    /**
-     * Create Downlink Bearer.
-     *
-     * @param dpn               - DPN
-     * @param dedicated_ebi     - Default EBI
-     * @param s1u_sgw_gtpu_teid - SGW GTP-U TEID
-     * @param s1u_enb_gtpu_ipv4 - ENodeB GTP-U IPv4 Address
-     * @param s1u_enb_gtpu_teid - ENodeB GTP-U TEID
-     */
-    void create_bearer_dl(
-            Short dpn,
-            Short dedicated_ebi,
-            Long s1u_sgw_gtpu_teid,
-            Ip4Address s1u_enb_gtpu_ipv4,
-            Long s1u_enb_gtpu_teid
+            Short default_ebi, Ip4Address ue_ipv4,
+            Long s1u_sgw_teid, Ip4Address s1u_sgw_ipv4,
+            Long session_id, Long client_id,
+            BigInteger op_id
     );
 
     /**
      * Modify Downlink Bearer.
-     *  @param topicId               - DPN
-     * @param s1u_enodeb_ipv4 - ENodeB GTP-U IPv4 Address
+     *  @param topic_id         - DPN
+     * @param s1u_sgw_ipv4    - SGW GTP-U IPv4 Address
      * @param s1u_enodeb_teid - ENodeB TEID
-     * @param s1u_sgw_ipv4 - SGW GTP-U IPv4 Address
-     * @param sessionId         - Session Id
-     * @param clientId      - Operation Identifier
-     * @param opId         - Session Id
+     * @param s1u_enodeb_ipv4 - ENodeB GTP-U IPv4 Address
+     * @param session_id       - Session Id
+     * @param client_id        - Operation Identifier
+     * @param op_id            - Session Id
      */
-    void modify_bearer_dl(
-            Short topicId,
-            Ip4Address s1u_enodeb_ipv4,
-            Long s1u_enodeb_teid,
-            Ip4Address s1u_sgw_ipv4,
-            Long sessionId,
-            Long clientId,
-            BigInteger opId
+    void modify_bearer(
+            Short topic_id,
+            Ip4Address s1u_sgw_ipv4, Long s1u_enodeb_teid, Ip4Address s1u_enodeb_ipv4,
+            Long session_id,
+            Long client_id,
+            BigInteger op_id
     );
 
     /**
-     * Modify Uplink Bearer.
-     *
-     * @param dpn               - DPN
-     * @param s1u_enb_gtpu_ipv4 - ENodeB GTP-U IPv4 Address
-     * @param s1u_enb_gtpu_teid - ENodeB GTP-U TEID
-     * @param s1u_sgw_gtpu_teid - SGW GTP-U TEID
+     * DeleteOrQuery Mobility Session.
+     *  @param topic_id          - DPN
+     * @param session_id        - Session Id
+     * @param client_id - Client Identifier
+     * @param op_id     - Operation Identifier
      */
-    void modify_bearer_ul(
-            Short dpn,
-            Ip4Address s1u_enb_gtpu_ipv4,
-            Long s1u_enb_gtpu_teid,
-            Long s1u_sgw_gtpu_teid
-    );
-
-    /**
-     * DeleteOrQuery Bearer.
-     *
-     * @param dpnTopic          - DPN
-     * @param s1u_sgw_gtpu_teid - SGW GTP-U TEID
-     */
-    void delete_bearer(
-            Short dpnTopic,
-            Long s1u_sgw_gtpu_teid
+    void delete_session(
+            Short topic_id,
+            Long session_id, Long client_id,
+            BigInteger op_id
     );
 
     /**
