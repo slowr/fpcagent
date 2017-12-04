@@ -16,15 +16,12 @@
 
 package org.onosproject.fpcagent;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.felix.scr.annotations.*;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.fpcagent.helpers.ConfigHelper;
-import org.onosproject.fpcagent.helpers.DpnApi;
 import org.onosproject.fpcagent.workers.ZMQSBPublisherManager;
 import org.onosproject.fpcagent.workers.ZMQSBSubscriberManager;
 import org.onosproject.net.config.*;
@@ -38,17 +35,13 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.c
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configuredpn.DefaultConfigureDpnOutput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.CreateOrUpdate;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.DeleteOrQuery;
-import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.payload.Contexts;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.result.ResultEnum;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbody.resulttype.DefaultErr;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbodydpn.resulttype.DefaultEmptyCase;
-import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.mobilityinfo.mobprofileparameters.ThreegppTunnel;
 import org.onosproject.yang.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Optional;
 
 import static org.onosproject.fpcagent.FpcUtil.*;
@@ -89,8 +82,6 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
 
     /* Variables */
     private FpcConfig fpcConfig;
-    private HashMap<String, ArrayList<Contexts>> sessionContextsMap = Maps.newHashMap();
-    private HashMap<String, String> nodeNetworkMap = Maps.newHashMap();
 
     /* Config */
     private ConfigFactory<ApplicationId, FpcConfig> fpcConfigConfigFactory =
@@ -212,66 +203,24 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                     case QUERY:
                         break;
                     case DELETE:
-                        if (input.opBody() instanceof DeleteOrQuery) {
-                            DeleteOrQuery deleteOrQuery = (DeleteOrQuery) input.opBody();
-                            // TODO: move to tenant service
-                            deleteOrQuery.targets().forEach(
-                                    target -> {
-                                        log.info("target {}", target);
-                                        String targetStr = target.target().union().string();
-                                        sessionContextsMap.getOrDefault(targetStr, Lists.newArrayList()).parallelStream().forEach(
-                                                context -> {
-                                                    log.info("context {}", context);
-                                                    context.dpns().forEach(
-                                                            dpn -> {
-                                                                log.info("DPN {}", dpn);
-                                                                Long teid;
-                                                                if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
-                                                                    teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
-                                                                } else {
-                                                                    return;
-                                                                }
-
-                                                                Short dpnTopic = DpnApi.getTopicFromNode(nodeNetworkMap.get(dpn.dpnId().fpcIdentity().union().string()));
-
-                                                                if (targetStr.endsWith("ul") || targetStr.endsWith("dl")) {
-                                                                    log.info("DELETE Bearer");
-                                                                    DpnApi.delete_bearer(
-                                                                            dpnTopic,
-                                                                            teid
-                                                                    );
-                                                                } else {
-                                                                    log.info("DELETE session");
-                                                                    DpnApi.delete_session(
-                                                                            dpnTopic,
-                                                                            context.lbi().uint8(),
-                                                                            teid,
-                                                                            input.clientId().fpcIdentity().union().int64(),
-                                                                            input.opId().uint64(),
-                                                                            context.contextId().fpcIdentity().union().int64()
-                                                                    );
-                                                                }
-                                                            }
-                                                    );
-                                                }
-                                        );
-                                    }
-                            );
-                        }
+                        configureOutput = tenantService.configureDelete(
+                                (DeleteOrQuery) input.opBody(),
+                                input.clientId(),
+                                input.opId()
+                        );
                         break;
                 }
                 configureOutput.opId(input.opId());
             }
+            // TODO fix DELETE to update the NODE correctly.
+            tenantService.getTenants().ifPresent(tenants -> tenantService.updateNode(tenants));
         } catch (Exception e) {
             DefaultErr defaultErr = new DefaultErr();
             defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
             defaultErr.errorTypeId(ErrorTypeId.of(0));
             configureOutput.resultType(defaultErr);
             configureOutput.result(Result.of(ResultEnum.ERR));
-
             log.error(ExceptionUtils.getFullStackTrace(e));
-        } finally {
-            tenantService.getTenants().ifPresent(tenants -> tenantService.updateNode(tenants));
         }
 
         ResourceData dataNode = modelConverter.createDataNode(

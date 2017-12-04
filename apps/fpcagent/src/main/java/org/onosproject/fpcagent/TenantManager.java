@@ -1,7 +1,7 @@
 package org.onosproject.fpcagent;
 
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.felix.scr.annotations.*;
 import org.onlab.packet.Ip4Address;
@@ -18,9 +18,11 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.*
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configure.DefaultConfigureOutput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.instructions.instructions.instrtype.Instr3GppMob;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.CreateOrUpdate;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.DeleteOrQuery;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.payload.Contexts;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.result.ResultEnum;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbody.resulttype.DefaultCommonSuccess;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbody.resulttype.DefaultDeleteSuccess;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbody.resulttype.DefaultErr;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.DefaultTenant;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.Tenant;
@@ -30,6 +32,7 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.t
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcIdentity;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.fpccontext.Dpns;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.mobilityinfo.mobprofileparameters.ThreegppTunnel;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.targetsvalue.Targets;
 import org.onosproject.yang.gen.v1.ietfdmmthreegpp.rev20160803.ietfdmmthreegpp.threegppinstr.Bits;
 import org.onosproject.yang.model.*;
 import org.slf4j.Logger;
@@ -181,9 +184,8 @@ public class TenantManager implements TenantService {
     ) {
         DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
         Collection<Callable<Object>> tasks = new ArrayList<>();
-
+        DefaultCommonSuccess defaultCommonSuccess = new DefaultCommonSuccess();
         try {
-            DefaultCommonSuccess defaultCommonSuccess = new DefaultCommonSuccess();
             for (Contexts context : create.contexts()) {
                 defaultCommonSuccess.addToContexts(context);
 
@@ -247,39 +249,57 @@ public class TenantManager implements TenantService {
 
 
                                 if (commands.contains("session")) {
-                                    tasks.add(Executors.callable(() -> DpnApi.create_session(
-                                            dpnTopic,
-                                            imsi,
-                                            Ip4Prefix.valueOf(context.delegatingIpPrefixes().get(0).toString()).address(),
-                                            ebi,
-                                            ulLocalAddress,
-                                            s1u_sgw_gtpu_teid,
-                                            cId,
-                                            opId,
-                                            contextId
-                                    )));
+                                    tasks.add(Executors.callable(() -> {
+                                        DpnApi.create_session(
+                                                dpnTopic,
+                                                imsi,
+                                                Ip4Prefix.valueOf(context.delegatingIpPrefixes().get(0).toString()).address(),
+                                                ebi,
+                                                ulLocalAddress,
+                                                s1u_sgw_gtpu_teid,
+                                                cId,
+                                                opId,
+                                                contextId
+                                        );
+
+                                        getDefaultTenant().ifPresent(
+                                                tenant -> tenant.fpcMobility().addToContexts(convertContext(context))
+                                        );
+                                    }));
 
                                     if (commands.contains("downlink")) {
-                                        tasks.add(Executors.callable(() -> DpnApi.modify_bearer_dl(
-                                                dpnTopic,
-                                                s1u_sgw_gtpu_teid,
-                                                dlRemoteAddress,
-                                                s1u_enb_gtpu_teid,
-                                                cId,
-                                                opId
-                                        )));
+                                        tasks.add(Executors.callable(() -> {
+                                            DpnApi.modify_bearer_dl(
+                                                    dpnTopic,
+                                                    s1u_sgw_gtpu_teid,
+                                                    dlRemoteAddress,
+                                                    s1u_enb_gtpu_teid,
+                                                    cId,
+                                                    opId
+                                            );
+
+                                            getDefaultTenant().ifPresent(
+                                                    tenant -> tenant.fpcMobility().addToContexts(convertContext(context))
+                                            );
+                                        }));
                                     }
                                 } else if (commands.contains("indirect-forward")) {
                                     // TODO - Modify API for Indirect Forwarding to/from another SGW
                                 } else if (commands.contains("uplink")) {
-                                    tasks.add(Executors.callable(() -> DpnApi.create_bearer_ul(
-                                            dpnTopic,
-                                            imsi,
-                                            lbi,
-                                            ebi,
-                                            ulLocalAddress,
-                                            s1u_sgw_gtpu_teid
-                                    )));
+                                    tasks.add(Executors.callable(() -> {
+                                        DpnApi.create_bearer_ul(
+                                                dpnTopic,
+                                                imsi,
+                                                lbi,
+                                                ebi,
+                                                ulLocalAddress,
+                                                s1u_sgw_gtpu_teid
+                                        );
+
+                                        getDefaultTenant().ifPresent(
+                                                tenant -> tenant.fpcMobility().addToContexts(convertContext(context))
+                                        );
+                                    }));
                                 }
                             } else {
                                 throw new IllegalArgumentException("Could not find Topic ID");
@@ -304,12 +324,6 @@ public class TenantManager implements TenantService {
 
             configureOutput.resultType(defaultCommonSuccess);
             configureOutput.result(Result.of(ResultEnum.OK));
-
-            create.contexts().forEach(
-                    contexts -> getDefaultTenant().ifPresent(
-                            tenant -> tenant.fpcMobility().addToContexts(convertContext(contexts))
-                    )
-            );
         } catch (Exception e) {
             log.error(ExceptionUtils.getFullStackTrace(e));
             DefaultErr defaultErr = new DefaultErr();
@@ -473,6 +487,126 @@ public class TenantManager implements TenantService {
         return configureOutput;
     }
 
+    public DefaultConfigureOutput configureDelete(
+            DeleteOrQuery delete,
+            ClientIdentifier clientId,
+            OpIdentifier operationId
+    ) {
+        DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
+        Collection<Callable<Object>> tasks = new ArrayList<>();
+        DefaultDeleteSuccess defaultDeleteSuccess = new DefaultDeleteSuccess();
+        try {
+            for (Targets target : delete.targets()) {
+                defaultDeleteSuccess.addToTargets(target);
+                String targetStr = target.target().toString(),
+                        s = StringUtils.substringBetween(targetStr, "contexts=", "/"),
+                        trgt = s != null ? s : StringUtils.substringAfter(targetStr, "contexts=");
+
+                getDefaultTenant().map(
+                        tenant -> {
+                            if (tenant.fpcMobility().contexts() != null) {
+                                return tenant.fpcMobility()
+                                        .contexts()
+                                        .stream()
+                                        .filter(contexts -> contexts.contextId().toString().equals(trgt))
+                                        .findFirst()
+                                        .orElseThrow(
+                                                () -> new IllegalArgumentException("Context doesn't exist.")
+                                        );
+                            }
+                            throw new IllegalArgumentException("Contexts are empty.");
+                        }
+                ).ifPresent(
+                        context -> context.dpns().forEach(
+                                dpn -> {
+                                    Optional<String> key = getDefaultTenant().flatMap(tenant ->
+                                            tenant.fpcTopology()
+                                                    .dpns()
+                                                    .stream()
+                                                    .filter(dpns -> dpns.dpnId().equals(dpn.dpnId()))
+                                                    .findFirst().map(node -> node.nodeId() + "/" + node.networkId())
+                                    );
+
+                                    if (key.isPresent()) {
+                                        Short dpnTopic = DpnApi.getTopicFromNode(key.get());
+
+                                        if (dpnTopic != null) {
+                                            Long teid;
+                                            if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
+                                                teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
+                                            } else {
+                                                throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
+                                            }
+
+                                            long cId = clientId.fpcIdentity().union().int64();
+                                            BigInteger opId = operationId.uint64();
+
+                                            if (targetStr.endsWith("ul") || targetStr.endsWith("dl")) {
+                                                tasks.add(Executors.callable(() -> {
+                                                    DpnApi.delete_bearer(
+                                                            dpnTopic,
+                                                            teid
+                                                    );
+
+                                                    context.dl(null);
+                                                    context.ul(null);
+                                                }));
+                                            } else {
+                                                tasks.add(Executors.callable(() -> {
+                                                    DpnApi.delete_session(
+                                                            dpnTopic,
+                                                            context.lbi().uint8(),
+                                                            teid,
+                                                            cId,
+                                                            opId,
+                                                            context.contextId().fpcIdentity().union().int64()
+                                                    );
+
+                                                    getDefaultTenant().ifPresent(
+                                                            tenant -> tenant.fpcMobility()
+                                                                    .contexts()
+                                                                    .remove(context)
+                                                    );
+                                                }));
+                                            }
+
+                                        } else {
+                                            throw new IllegalArgumentException("Could not find Topic ID");
+                                        }
+                                    } else {
+                                        throw new IllegalArgumentException("DPN does not have node and network ID defined.");
+                                    }
+                                }
+                        )
+                );
+
+            }
+
+            ExecutorService executor = Executors.newWorkStealingPool();
+            executor.invokeAll(tasks).forEach(
+                    future -> {
+                        try {
+                            future.get();
+                        } catch (Exception e) {
+                            throw new IllegalStateException(e);
+                        }
+                    }
+            );
+
+            configureOutput.resultType(defaultDeleteSuccess);
+            configureOutput.result(Result.of(ResultEnum.OK));
+
+        } catch (Exception e) {
+            log.error(ExceptionUtils.getFullStackTrace(e));
+            DefaultErr defaultErr = new DefaultErr();
+            configureOutput.resultType(defaultErr);
+            defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
+            defaultErr.errorTypeId(ErrorTypeId.of(0));
+        }
+
+        return configureOutput;
+    }
+
     /**
      * Accumulates events to allow processing after a desired number of
      * events were accumulated.
@@ -488,25 +622,27 @@ public class TenantManager implements TenantService {
 
         @Override
         public void processItems(List<DynamicConfigEvent> events) {
-            DynamicConfigEvent event = Iterables.getLast(events);
-            log.debug("processItems {}", event);
-            checkNotNull(event, EVENT_NULL);
-            switch (event.type()) {
-                case NODE_ADDED:
-                case NODE_DELETED:
-                    Filter filter = Filter.builder().build();
-                    DataNode node = dynamicConfigService.readNode(tenantsResourceId, filter);
-                    getModelObjects(node, null).forEach(
-                            modelObject -> fpcAgentData.tenants((DefaultTenants) modelObject)
-                    );
-                    break;
-                case NODE_UPDATED:
-                case NODE_REPLACED:
-                    break;
-                default:
-                    log.warn(UNKNOWN_EVENT, event.type());
-                    break;
-            }
+            events.forEach(
+                    event -> {
+                        checkNotNull(event, EVENT_NULL);
+                        switch (event.type()) {
+                            case NODE_ADDED:
+                            case NODE_DELETED:
+                                Filter filter = Filter.builder().build();
+                                DataNode node = dynamicConfigService.readNode(tenantsResourceId, filter);
+                                getModelObjects(node, null).forEach(
+                                        modelObject -> fpcAgentData.tenants((DefaultTenants) modelObject)
+                                );
+                                break;
+                            case NODE_UPDATED:
+                            case NODE_REPLACED:
+                                break;
+                            default:
+                                log.warn(UNKNOWN_EVENT, event.type());
+                                break;
+                        }
+                    }
+            );
         }
 
     }

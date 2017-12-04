@@ -290,8 +290,8 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
         public void run() {
             try {
                 this.broadcastTopic();
-                log.info("Thread sleeping: " + Thread.currentThread().getName());
-                Thread.sleep(10000);
+                log.debug("Thread sleeping: " + Thread.currentThread().getName());
+                Thread.sleep(2000);
             } catch (InterruptedException e) {
                 if (conflictingTopic) {
                     conflictingTopic = false;

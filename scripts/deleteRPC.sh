@@ -4,7 +4,7 @@ curl -X POST --header 'Content-Type: application/json' -u onos:rocks --header 'A
         "op-id": "3",
         "targets": [
             {
-                "target": "/ietf-dmm-fpcagent:tenants/tenant/default/fpc-mobility/contexts/202374885"
+                "target": "/ietf-dmm-fpcagent:tenants/tenant=default/fpc-mobility/contexts=202374887"
             }
         ],
         "client-id": "1",
@@ -13,4 +13,4 @@ curl -X POST --header 'Content-Type: application/json' -u onos:rocks --header 'A
         "op-type": "delete",
         "op-ref-scope": "none"
     }
-}' 'http://localhost:8181/onos/restconf/operations/ietf-dmm-fpcagent:configure'
+}' 'http://localhost:8181/onos/restconf/operations/ietf-dmm-fpcagent:configure' | python -m json.tool

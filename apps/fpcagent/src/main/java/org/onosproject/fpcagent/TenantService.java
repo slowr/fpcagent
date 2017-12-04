@@ -6,6 +6,7 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.D
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.OpIdentifier;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configure.DefaultConfigureOutput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.CreateOrUpdate;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.DeleteOrQuery;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.Tenant;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcIdentity;
 import org.onosproject.yang.model.DataNode;
@@ -44,6 +45,12 @@ public interface TenantService {
 
     DefaultConfigureOutput configureUpdate(
             CreateOrUpdate create,
+            ClientIdentifier clientId,
+            OpIdentifier operationId
+    );
+
+    DefaultConfigureOutput configureDelete(
+            DeleteOrQuery delete,
             ClientIdentifier clientId,
             OpIdentifier operationId
     );
