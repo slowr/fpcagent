@@ -1,11 +1,23 @@
 package org.onosproject.fpcagent.helpers;
 
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ClientIdentifier;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.Contexts;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.DefaultContexts;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcContextId;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnGroupId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcIdentity;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcPortId;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.fpccontext.Dl;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.fpccontext.Dpns;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.fpccontext.Ul;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.fpcidentity.FpcIdentityUnion;
+import org.onosproject.yang.gen.v1.ietfdmmthreegpp.rev20160803.ietfdmmthreegpp.EbiType;
+import org.onosproject.yang.gen.v1.ietfdmmthreegpp.rev20160803.ietfdmmthreegpp.ImsiType;
+import org.onosproject.yang.gen.v1.ietfinettypes.rev20130715.ietfinettypes.IpPrefix;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.List;
 import java.util.function.Function;
 
 public class Converter {
@@ -101,4 +113,55 @@ public class Converter {
     public static Function<String, FpcIdentity> getFpcIdentity = (v) -> new FpcIdentity(new FpcIdentityUnion(v));
     public static Function<String, ClientIdentifier> getClientIdentity = (v) -> new ClientIdentifier(getFpcIdentity.apply(v));
 
+    public static Contexts convertContext(org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.payload.Contexts contexts) {
+        Contexts ctx = new DefaultContexts();
+        FpcContextId fpcContextId = contexts.contextId();
+        List<IpPrefix> ipPrefixes = contexts.delegatingIpPrefixes();
+        Dl dl = contexts.dl();
+        Ul ul = contexts.ul();
+        boolean dormant = contexts.dormant();
+        FpcDpnGroupId fpcDpnGroupId = contexts.dpnGroup();
+        List<Dpns> dpns = contexts.dpns();
+        EbiType ebi = contexts.ebi();
+        EbiType lbi = contexts.lbi();
+        ImsiType imsi = contexts.imsi();
+        FpcContextId fpcContextId1 = contexts.parentContext();
+        List<FpcPortId> ports = contexts.ports();
+
+        if (fpcContextId != null) {
+            ctx.contextId(fpcContextId);
+        }
+        if (ipPrefixes != null) {
+            ctx.delegatingIpPrefixes(ipPrefixes);
+        }
+        if (dl != null) {
+            ctx.dl(dl);
+        }
+        if (ul != null) {
+            ctx.ul(ul);
+        }
+        ctx.dormant(dormant);
+        if (fpcDpnGroupId != null) {
+            ctx.dpnGroup(fpcDpnGroupId);
+        }
+        if (dpns != null) {
+            ctx.dpns(dpns);
+        }
+        if (ebi != null) {
+            ctx.ebi(ebi);
+        }
+        if (lbi != null) {
+            ctx.lbi(lbi);
+        }
+        if (imsi != null) {
+            ctx.imsi(imsi);
+        }
+        if (fpcContextId1 != null) {
+            ctx.parentContext(fpcContextId1);
+        }
+        if (ports != null) {
+            ctx.ports(ports);
+        }
+        return ctx;
+    }
 }

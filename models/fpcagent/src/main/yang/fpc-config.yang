@@ -1,6 +1,6 @@
 module fpc-config {
     yang-version 1;
-    namespace "urn:opendaylight:fpc:config";
+    namespace "urn:onos:fpc:config";
     prefix fpc-config;
 
     description

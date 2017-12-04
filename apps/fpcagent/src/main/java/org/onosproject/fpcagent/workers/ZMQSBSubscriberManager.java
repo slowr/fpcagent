@@ -195,6 +195,7 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
                 byte[] contents = subscriber.recv();
                 byte topic = contents[0];
                 byte messageType = contents[1];
+                log.info("Received {}", contents);
                 switch (topic) {
                     case 1:
                         if (messageType == ASSIGN_CONFLICT && toInt(contents, 3) != controllerSourceId) {
@@ -207,10 +208,8 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
                         Map.Entry<FpcDpnId, Object> entry = DpnApi.decode(contents);
                         if (entry != null) {
                             if (entry.getValue() instanceof DownlinkDataNotification) {
-//                                log.info("DownlinkDataNotification");
                             } else if (entry.getValue() instanceof DpnApi.DPNStatusIndication) {
                                 DpnApi.DPNStatusIndication dpnStatus = (DpnApi.DPNStatusIndication) entry.getValue();
-//                                log.info("DPNStatusIndication");
                                 if (dpnStatus.getStatus() == DpnApi.DPNStatusIndication.Status.HELLO) {
                                     sendHelloReply(dpnStatus);
                                 }

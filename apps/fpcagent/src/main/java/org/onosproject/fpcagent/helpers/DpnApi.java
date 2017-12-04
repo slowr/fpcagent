@@ -29,6 +29,8 @@ import static org.onosproject.fpcagent.helpers.Converter.*;
  */
 public class DpnApi {
     protected static final Logger log = LoggerFactory.getLogger(DpnApi.class);
+    private static final Map<String, FpcDpnId> uplinkDpnMap;
+    private static final Map<String, Short> topicToNodeMap;
     /**
      * Topic for broadcasting
      */
@@ -44,7 +46,6 @@ public class DpnApi {
     private static byte BYE = 0b0000_1001;
     private static byte SEND_ADC_TYPE = 0b001_0001;
     private static byte DDN_ACK = 0b0000_0110;
-
     private static byte DPN_HELLO = 0b0000_0001;
     private static byte DPN_BYE = 0b0000_0010;
     private static byte DOWNLINK_DATA_NOTIFICATION = 0b0000_0101;
@@ -52,8 +53,6 @@ public class DpnApi {
     private static byte DPN_OVERLOAD_INDICATION = 0b0000_0101;
     private static byte DPN_REPLY = 0b0000_0100;
     private static String DOWNLINK_DATA_NOTIFICATION_STRING = "Downlink-Data-Notification";
-    private static final Map<String, FpcDpnId> uplinkDpnMap;
-    private static final Map<String, Short> topicToNodeMap;
 
     static {
         uplinkDpnMap = Maps.newConcurrentMap();
@@ -312,9 +311,9 @@ public class DpnApi {
      * @param sponsor_ID   - Sponsor ID
      */
     public static void send_ADC_rules(Short topic,
-                               String domain_name, String ip,
-                               Short drop, Long rating_group,
-                               Long service_ID, String sponsor_ID) {
+                                      String domain_name, String ip,
+                                      Short drop, Long rating_group,
+                                      Long service_ID, String sponsor_ID) {
         Ip4Prefix ip_prefix = null;
         if (ip != null) {
             ip_prefix = Ip4Prefix.valueOf(ip);
@@ -409,9 +408,11 @@ public class DpnApi {
                 status = DPNStatusIndication.Status.OVERLOAD_INDICATION;
             } else if (buf[3] == DPN_HELLO) {
                 status = DPNStatusIndication.Status.HELLO;
+                log.info("Hello {} on topic {}", key, buf[2]);
                 topicToNodeMap.put(key, (short) buf[2]);
             } else if (buf[3] == DPN_BYE) {
                 status = DPNStatusIndication.Status.BYE;
+                log.info("Bye {}", key);
                 topicToNodeMap.remove(key);
             }
             return new AbstractMap.SimpleEntry<>(uplinkDpnMap.get(key), new DPNStatusIndication(status, key));
@@ -441,6 +442,7 @@ public class DpnApi {
          * Node Reference of the DPN
          */
         public Short nodeRef;
+
         /**
          * Constructor providing the DPN and its associated Status.
          *

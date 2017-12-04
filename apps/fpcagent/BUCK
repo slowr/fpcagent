@@ -10,6 +10,7 @@ COMPILE_DEPS = [
     '//lib:javax.ws.rs-api',
     '//utils/rest:onlab-rest',
     '//core/store/serializers:onos-core-serializers',
+    '//apps/restconf/utils:onos-apps-restconf-utils',
     ':zeromq',
     ':json',
 ]

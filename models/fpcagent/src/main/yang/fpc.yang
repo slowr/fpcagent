@@ -1,6 +1,6 @@
 module fpc {
     yang-version 1;
-    namespace "urn:opendaylight:params:xml:ns:yang:fpc";
+    namespace "urn:onos:params:xml:ns:yang:fpc";
     prefix "fpc";
 
     import ietf-dmm-fpcagent { prefix fpcagent; }
@@ -145,7 +145,7 @@ module fpc {
       }
     }
 
-    rpc register_client {
+    rpc register-client {
       input {
         uses fpc:connection-config;
       }
@@ -154,7 +154,7 @@ module fpc {
       }
     }
 
-    rpc deregister_client {
+    rpc deregister-client {
       input {
         leaf client-id {
           type fpcagent:client-identifier;
