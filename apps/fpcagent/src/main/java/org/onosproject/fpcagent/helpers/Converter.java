@@ -1,7 +1,6 @@
 package org.onosproject.fpcagent.helpers;
 
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ClientIdentifier;
-import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.Contexts;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.DefaultContexts;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcContextId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnGroupId;
@@ -113,8 +112,8 @@ public class Converter {
     public static Function<String, FpcIdentity> getFpcIdentity = (v) -> new FpcIdentity(new FpcIdentityUnion(v));
     public static Function<String, ClientIdentifier> getClientIdentity = (v) -> new ClientIdentifier(getFpcIdentity.apply(v));
 
-    public static Contexts convertContext(org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.payload.Contexts contexts) {
-        Contexts ctx = new DefaultContexts();
+    public static DefaultContexts convertContext(org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.payload.Contexts contexts) {
+        DefaultContexts ctx = new DefaultContexts();
         FpcContextId fpcContextId = contexts.contextId();
         List<IpPrefix> ipPrefixes = contexts.delegatingIpPrefixes();
         Dl dl = contexts.dl();

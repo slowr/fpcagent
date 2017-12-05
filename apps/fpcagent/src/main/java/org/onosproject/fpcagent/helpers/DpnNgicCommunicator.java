@@ -1,5 +1,20 @@
-package org.onosproject.fpcagent.helpers;
+/*
+ * Copyright 2017-present Open Networking Foundation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
+package org.onosproject.fpcagent.helpers;
 
 import org.onlab.packet.Ip4Address;
 import org.onlab.packet.Ip4Prefix;
@@ -14,7 +29,7 @@ import java.nio.ByteBuffer;
 import static org.onosproject.fpcagent.helpers.Converter.*;
 
 /**
- * DPDK DPN API over ZeroMQ.
+ * DPDK DPN API over ZeroMQ for NGIC.
  */
 public class DpnNgicCommunicator implements DpnCommunicationService {
     protected static final Logger log = LoggerFactory.getLogger(DpnNgicCommunicator.class);
@@ -133,7 +148,6 @@ public class DpnNgicCommunicator implements DpnCommunicationService {
         ZMQSBPublisherManager.getInstance().send(bb);
     }
 
-
     @Override
     public void send_ADC_rules(
             Short topic,
@@ -143,6 +157,7 @@ public class DpnNgicCommunicator implements DpnCommunicationService {
             Long rating_group,
             Long service_ID, String sponsor_ID
     ) {
+        // TODO take a look for this function. Not tested.
         Ip4Prefix ip_prefix = null;
         if (ip != null) {
             ip_prefix = Ip4Prefix.valueOf(ip);
@@ -185,6 +200,8 @@ public class DpnNgicCommunicator implements DpnCommunicationService {
 
     /**
      * Following the NGIC message types.
+     *
+     * This type structure is defined in NGIC at interface/zmq/zmqsub.h:51
      */
     enum s11MsgType {
         CREATE_SESSION(1),

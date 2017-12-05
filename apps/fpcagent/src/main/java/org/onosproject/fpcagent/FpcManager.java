@@ -17,14 +17,23 @@
 package org.onosproject.fpcagent;
 
 import org.apache.commons.lang.exception.ExceptionUtils;
-import org.apache.felix.scr.annotations.*;
+import org.apache.felix.scr.annotations.Activate;
+import org.apache.felix.scr.annotations.Component;
+import org.apache.felix.scr.annotations.Deactivate;
+import org.apache.felix.scr.annotations.Reference;
+import org.apache.felix.scr.annotations.ReferenceCardinality;
+import org.apache.felix.scr.annotations.Service;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.fpcagent.helpers.ConfigHelper;
 import org.onosproject.fpcagent.workers.ZMQSBPublisherManager;
 import org.onosproject.fpcagent.workers.ZMQSBSubscriberManager;
-import org.onosproject.net.config.*;
+import org.onosproject.net.config.ConfigFactory;
+import org.onosproject.net.config.NetworkConfigEvent;
+import org.onosproject.net.config.NetworkConfigListener;
+import org.onosproject.net.config.NetworkConfigRegistry;
+import org.onosproject.net.config.NetworkConfigService;
 import org.onosproject.net.config.basics.SubjectFactories;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.IetfDmmFpcagentService;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ErrorTypeId;
@@ -38,7 +47,13 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.o
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.result.ResultEnum;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbody.resulttype.DefaultErr;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbodydpn.resulttype.DefaultEmptyCase;
-import org.onosproject.yang.model.*;
+import org.onosproject.yang.model.DefaultModelObjectData;
+import org.onosproject.yang.model.ModelConverter;
+import org.onosproject.yang.model.ModelObject;
+import org.onosproject.yang.model.ResourceData;
+import org.onosproject.yang.model.RpcInput;
+import org.onosproject.yang.model.RpcOutput;
+import org.onosproject.yang.model.RpcRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -118,6 +133,9 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
         log.info("FPC Agent Stopped");
     }
 
+    /**
+     * Initialize ZMQ Managers based on configuration.
+     */
     private void init() {
         fpcConfig.getConfig().ifPresent(
                 helper -> {
@@ -153,7 +171,7 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
         output.resultType(new DefaultEmptyCase());
 
         try {
-            tenantService.getModelObjects(rpcInput.data(), configureDpnResourceId).forEach(
+            tenantService.getModelObjects(rpcInput.data(), configureDpn).forEach(
                     modelObject -> {
                         DefaultConfigureDpnInput input = (DefaultConfigureDpnInput) modelObject;
                         String dpnId = input.inputDpnId().fpcIdentity().union().string();
@@ -183,7 +201,7 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
         DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
 
         try {
-            for (ModelObject modelObject : tenantService.getModelObjects(rpcInput.data(), configureResourceId)) {
+            for (ModelObject modelObject : tenantService.getModelObjects(rpcInput.data(), configure)) {
                 DefaultConfigureInput input = (DefaultConfigureInput) modelObject;
                 switch (input.opType()) {
                     case CREATE:
@@ -212,11 +230,10 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                 }
                 configureOutput.opId(input.opId());
             }
-            // TODO fix DELETE to update the NODE correctly.
-            tenantService.getTenants().ifPresent(tenants -> tenantService.updateNode(tenants));
         } catch (Exception e) {
+            // if there is an exception respond with an error.
             DefaultErr defaultErr = new DefaultErr();
-            defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
+            defaultErr.errorInfo(ExceptionUtils.getMessage(e));
             defaultErr.errorTypeId(ErrorTypeId.of(0));
             configureOutput.resultType(defaultErr);
             configureOutput.result(Result.of(ResultEnum.ERR));

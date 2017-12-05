@@ -17,37 +17,31 @@
 package org.onosproject.fpcagent;
 
 import com.google.common.collect.Maps;
-import org.onosproject.restconf.utils.RestconfUtils;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ClientIdentifier;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.DefaultTenants;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.OpIdentifier;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.DefaultTenant;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.TenantKeys;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.yangautoprefixnotify.value.DefaultDownlinkDataNotification;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.yangautoprefixnotify.value.DownlinkDataNotification;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcIdentity;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.fpcidentity.FpcIdentityUnion;
-import org.onosproject.yang.model.DataNode;
-import org.onosproject.yang.model.DefaultResourceData;
-import org.onosproject.yang.model.ResourceData;
-import org.onosproject.yang.model.ResourceId;
+import org.onosproject.yang.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigInteger;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Map;
 
-import static org.onosproject.fpcagent.helpers.Converter.fromIntToLong;
-import static org.onosproject.fpcagent.helpers.Converter.toBigInt;
+import static org.onosproject.fpcagent.helpers.Converter.*;
 
 /**
  * Helper class which stores all the static variables.
  */
 public class FpcUtil {
-    protected static final Logger log = LoggerFactory.getLogger(FpcUtil.class);
-
     public static final int MAX_EVENTS = 1000;
     public static final int MAX_BATCH_MS = 5000;
     public static final int MAX_IDLE_MS = 1000;
@@ -55,9 +49,23 @@ public class FpcUtil {
     public static final String UNKNOWN_EVENT = "FPC Agent listener: unknown event: {}";
     public static final String EVENT_NULL = "Event cannot be null";
     public static final String FPC_APP_ID = "org.onosproject.fpcagent";
-
+    protected static final Logger log = LoggerFactory.getLogger(FpcUtil.class);
     private static final Map<String, FpcDpnId> uplinkDpnMap = Maps.newConcurrentMap();
     private static final Map<String, Short> nodeToTopicMap = Maps.newConcurrentMap();
+    public static ModelConverter modelConverter = null;
+    // Resource ID for Configure DPN RPC command
+    public static ResourceId configureDpn;
+    // Resource ID for Configure RPC command
+    public static ResourceId configure;
+    // Resource ID for tenants data
+    public static ResourceId tenants;
+    public static ResourceId defaultTenant;
+    public static ResourceId defaultTenantMobility;
+    public static ResourceId module;
+    public static ResourceId registerClientResourceId;
+    public static ResourceId deregisterClientResourceId;
+
+    public static FpcIdentity defaultIdentity = getFpcIdentity.apply("default");
 
     private static byte DPN_HELLO = 0b0000_0001;
     private static byte DPN_BYE = 0b0000_0010;
@@ -67,34 +75,77 @@ public class FpcUtil {
     private static byte DPN_REPLY = 0b0000_0100;
     private static String DOWNLINK_DATA_NOTIFICATION_STRING = "Downlink-Data-Notification";
 
-    // Resource ID for Configure DPN RPC command
-    public static ResourceId configureDpnResourceId;
-    // Resource ID for Configure RPC command
-    public static ResourceId configureResourceId;
-    // Resource ID for tenants data
-    public static ResourceId tenantsResourceId;
-    public static ResourceId registerClientResourceId;
-    public static ResourceId deregisterClientResourceId;
+    /**
+     * Returns resource id from model converter.
+     *
+     * @param modelId model object id
+     * @return resource id
+     */
+    static ResourceId getResourceVal(ModelObjectId modelId) {
+        DefaultModelObjectData.Builder data = DefaultModelObjectData.builder()
+                .identifier(modelId);
+        ResourceData resData = modelConverter.createDataNode(data.build());
+        return resData.resourceId();
+    }
 
-    static {
-        try {
-            configureDpnResourceId = RestconfUtils.convertUriToRid(
-                    new URI("/onos/restconf/operations/ietf-dmm-fpcagent:configure-dpn")
-            );
-            configureResourceId = RestconfUtils.convertUriToRid(
-                    new URI("/onos/restconf/operations/ietf-dmm-fpcagent:configure")
-            );
-            tenantsResourceId = RestconfUtils.convertUriToRid(
-                    new URI("/onos/restconf/data/ietf-dmm-fpcagent:tenants")
-            );
-            registerClientResourceId = RestconfUtils.convertUriToRid(
-                    new URI("/onos/restconf/data/fpc:register-client")
-            );
-            deregisterClientResourceId = RestconfUtils.convertUriToRid(
-                    new URI("/onos/restconf/data/fpc:deregister-client")
-            );
-        } catch (URISyntaxException ignored) {
-        }
+    /**
+     * Returns the resource id, after constructing model object id and
+     * converting it.
+     */
+    static void getResourceId() {
+        ModelObjectId moduleId = ModelObjectId.builder().build();
+        module = getResourceVal(moduleId);
+
+        ModelObjectId tenantsId = ModelObjectId.builder()
+                .addChild(DefaultTenants.class)
+                .build();
+
+        tenants = getResourceVal(tenantsId);
+
+        TenantKeys tenantKeys = new TenantKeys();
+        tenantKeys.tenantId(defaultIdentity);
+
+        ModelObjectId defaultTenantId = ModelObjectId.builder()
+                .addChild(DefaultTenants.class)
+                .addChild(DefaultTenant.class, tenantKeys)
+                .build();
+
+        defaultTenant = getResourceVal(defaultTenantId);
+
+        configure = ResourceId.builder()
+                .addBranchPointSchema("/", null)
+                .addBranchPointSchema("configure", "urn:ietf:params:xml:ns:yang:fpcagent")
+                .build();
+
+        configureDpn = ResourceId.builder()
+                .addBranchPointSchema("/", null)
+                .addBranchPointSchema("configure-dpn", "urn:ietf:params:xml:ns:yang:fpcagent")
+                .build();
+    }
+
+    static ModelObjectId.Builder defaultTenantBuilder() {
+        TenantKeys tenantKeys = new TenantKeys();
+        tenantKeys.tenantId(defaultIdentity);
+
+        return ModelObjectId.builder()
+                .addChild(DefaultTenants.class)
+                .addChild(DefaultTenant.class, tenantKeys);
+    }
+
+    /**
+     * Returns resource id for the specific tenant ID.
+     *
+     * @param tenantId tenant id
+     * @return resource ids
+     */
+    static ResourceId getTenantResourceId(FpcIdentity tenantId) {
+        TenantKeys tenantKeys = new TenantKeys();
+        tenantKeys.tenantId(tenantId);
+
+        return getResourceVal(ModelObjectId.builder()
+                .addChild(DefaultTenants.class)
+                .addChild(DefaultTenant.class, tenantKeys)
+                .build());
     }
 
     /**

@@ -20,57 +20,76 @@ import org.onlab.packet.Ip4Address;
 
 import java.math.BigInteger;
 
+/**
+ * Communication Service which sends packets to desired DPNs.
+ */
 public interface DpnCommunicationService {
-    /**
-     * Creates Mobility Session
-     *  @param topicId           - DPN
-     * @param imsi              - IMSI
-     * @param default_ebi       - Default EBI
-     */
-    void create_session(
-            Short topicId,
-            BigInteger imsi,
-            Short default_ebi, Ip4Address ue_ipv4,
-            Long s1u_sgw_teid, Ip4Address s1u_sgw_ipv4,
-            Long session_id, Long client_id,
-            BigInteger op_id
-    );
 
     /**
-     * Modify Downlink Bearer.
-     *  @param topic_id         - DPN
-     * @param s1u_sgw_ipv4    - SGW GTP-U IPv4 Address
-     * @param s1u_enodeb_teid - ENodeB TEID
-     * @param s1u_enodeb_ipv4 - ENodeB GTP-U IPv4 Address
-     * @param session_id       - Session Id
-     * @param client_id        - Operation Identifier
-     * @param op_id            - Session Id
+     * Creates Mobility Session.
+     *
+     * @param topic_id     - DPN Topic ID
+     * @param imsi         - IMSI identifier
+     * @param default_ebi  - EBI
+     * @param ue_ipv4      - UE IPv4 Address
+     * @param s1u_sgw_teid - SGW Tunnel Identifier
+     * @param s1u_sgw_ipv4 - SGW IPv4
+     * @param session_id   - Context Identifier
+     * @param client_id    - Client Identifier
+     * @param op_id        - Operation Identifier
      */
-    void modify_bearer(
+    void create_session(
             Short topic_id,
-            Ip4Address s1u_sgw_ipv4, Long s1u_enodeb_teid, Ip4Address s1u_enodeb_ipv4,
+            BigInteger imsi,
+            Short default_ebi,
+            Ip4Address ue_ipv4,
+            Long s1u_sgw_teid,
+            Ip4Address s1u_sgw_ipv4,
             Long session_id,
             Long client_id,
             BigInteger op_id
     );
 
     /**
-     * DeleteOrQuery Mobility Session.
-     *  @param topic_id          - DPN
-     * @param session_id        - Session Id
-     * @param client_id - Client Identifier
-     * @param op_id     - Operation Identifier
+     * Modifies Bearer.
+     *
+     * @param topic_id        - DPN Topic ID
+     * @param s1u_sgw_ipv4    - SGW IPv4 Address
+     * @param s1u_enodeb_teid - ENodeB Tunnel Identifier
+     * @param s1u_enodeb_ipv4 - ENodeB IPv4 Address
+     * @param session_id      - Context Identifier
+     * @param client_id       - Client Identifier
+     * @param op_id           - Operation Identifier
+     */
+    void modify_bearer(
+            Short topic_id,
+            Ip4Address s1u_sgw_ipv4,
+            Long s1u_enodeb_teid,
+            Ip4Address s1u_enodeb_ipv4,
+            Long session_id,
+            Long client_id,
+            BigInteger op_id
+    );
+
+    /**
+     * Deletes Mobility Session.
+     *
+     * @param topic_id   - DPN Topic ID
+     * @param session_id - Context Identifier
+     * @param client_id  - Client Identifier
+     * @param op_id      - Operation Identifier
      */
     void delete_session(
             Short topic_id,
-            Long session_id, Long client_id,
+            Long session_id,
+            Long client_id,
             BigInteger op_id
     );
 
     /**
      * Creates the byte buffer to send ADC rules over ZMQ
      *
-     * @param topic        - DPN Topic
+     * @param topic        - DPN Topic ID
      * @param domain_name  - domain
      * @param ip           - ipaddress/ipprefix (i.e. 127.0.0.1/32)
      * @param drop         - Drop if 1
@@ -80,8 +99,11 @@ public interface DpnCommunicationService {
      */
     void send_ADC_rules(
             Short topic,
-            String domain_name, String ip,
-            Short drop, Long rating_group,
-            Long service_ID, String sponsor_ID
+            String domain_name,
+            String ip,
+            Short drop,
+            Long rating_group,
+            Long service_ID,
+            String sponsor_ID
     );
 }

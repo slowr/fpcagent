@@ -143,7 +143,7 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
         String node_id = new String(Arrays.copyOfRange(contents, 8, 8 + nodeIdLen));
         String network_id = new String(Arrays.copyOfRange(contents, 9 + nodeIdLen, 9 + nodeIdLen + networkIdLen));
 
-        if (toUint8(subscriberId) == topic || nodeId.equals(node_id) || networkId.equals(network_id)) {
+        if (toUint8(subscriberId) == topic || (nodeId.equals(node_id) && networkId.equals(network_id))) {
             ByteBuffer bb = ByteBuffer.allocate(9 + nodeId.length() + networkId.length());
             bb.put(toUint8(broadcastAllId))
                     .put(ASSIGN_CONFLICT)
