@@ -75,7 +75,7 @@ public class DpnNgicCommunicator implements DpnCommunicationService {
                 .put(toUint32(client_id))
                 .put(toUint32(op_id.longValue()));
 
-        log.info("create_session: {}", bb.array());
+        log.debug("create_session: {}", bb.array());
         ZMQSBPublisherManager.getInstance().send(bb);
     }
 
@@ -114,7 +114,7 @@ public class DpnNgicCommunicator implements DpnCommunicationService {
                 .put(toUint32(client_id))
                 .put(toUint32(op_id.longValue()));
 
-        log.info("modify_bearer: {}", bb.array());
+        log.debug("modify_bearer: {}", bb.array());
         ZMQSBPublisherManager.getInstance().send(bb);
     }
 
@@ -144,7 +144,7 @@ public class DpnNgicCommunicator implements DpnCommunicationService {
                 .put(toUint32(client_id))
                 .put(toUint32(op_id.longValue()));
 
-        log.info("delete_session: {}", bb.array());
+        log.debug("delete_session: {}", bb.array());
         ZMQSBPublisherManager.getInstance().send(bb);
     }
 

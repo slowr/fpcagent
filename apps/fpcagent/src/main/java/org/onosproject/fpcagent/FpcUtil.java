@@ -60,7 +60,7 @@ public class FpcUtil {
     // Resource ID for tenants data
     public static ResourceId tenants;
     public static ResourceId defaultTenant;
-    public static ResourceId defaultTenantMobility;
+    public static ResourceId configureBundles;
     public static ResourceId module;
     public static ResourceId registerClientResourceId;
     public static ResourceId deregisterClientResourceId;
@@ -120,6 +120,11 @@ public class FpcUtil {
         configureDpn = ResourceId.builder()
                 .addBranchPointSchema("/", null)
                 .addBranchPointSchema("configure-dpn", "urn:ietf:params:xml:ns:yang:fpcagent")
+                .build();
+
+        configureBundles = ResourceId.builder()
+                .addBranchPointSchema("/", null)
+                .addBranchPointSchema("configure-bundles", "urn:ietf:params:xml:ns:yang:fpcagent")
                 .build();
     }
 

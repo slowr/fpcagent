@@ -16,6 +16,7 @@
 
 package org.onosproject.fpcagent;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Maps;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -94,16 +95,16 @@ public class TenantManager implements TenantService {
         dynamicConfigService.addListener(listener);
 
         // Create the Default Tenant and added to the Tenants structure.
-        DefaultTenants tenants = new DefaultTenants();
-        DefaultTenant tenant = new DefaultTenant();
+        final DefaultTenants tenants = new DefaultTenants();
+        final DefaultTenant tenant = new DefaultTenant();
         tenant.tenantId(defaultIdentity);
         tenant.fpcTopology(new DefaultFpcTopology());
         tenant.fpcPolicy(new DefaultFpcPolicy());
         tenant.fpcMobility(new DefaultFpcMobility());
         tenants.addToTenant(tenant);
 
-        // Initialize FPC™2 Agent Information.
-        DefaultFpcAgentInfo fpcAgentInfo = new DefaultFpcAgentInfo();
+        // Initialize FPC Agent Information.
+        final DefaultFpcAgentInfo fpcAgentInfo = new DefaultFpcAgentInfo();
 
         // Create nodes in dynamic configuration store for RESTCONF accessibility.
         final ModelObjectId root = ModelObjectId.builder().build();
@@ -122,6 +123,7 @@ public class TenantManager implements TenantService {
     @Override
     public Optional<DefaultTenant> getDefaultTenant() {
         Filter filter = Filter.builder().build();
+        // TODO implement Cache to avoid searching store
         DataNode dataNode = dynamicConfigService.readNode(defaultTenant, filter);
 
         return getModelObjects(dataNode, tenants)
@@ -380,7 +382,6 @@ public class TenantManager implements TenantService {
             defaultErr.errorInfo(ExceptionUtils.getMessage(e));
             defaultErr.errorTypeId(ErrorTypeId.of(0));
         }
-
         return configureOutput;
     }
 

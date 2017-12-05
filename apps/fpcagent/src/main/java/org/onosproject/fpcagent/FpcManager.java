@@ -16,30 +16,26 @@
 
 package org.onosproject.fpcagent;
 
+import com.google.common.base.Stopwatch;
 import org.apache.commons.lang.exception.ExceptionUtils;
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.Service;
+import org.apache.felix.scr.annotations.*;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.fpcagent.helpers.ConfigHelper;
 import org.onosproject.fpcagent.workers.ZMQSBPublisherManager;
 import org.onosproject.fpcagent.workers.ZMQSBSubscriberManager;
-import org.onosproject.net.config.ConfigFactory;
-import org.onosproject.net.config.NetworkConfigEvent;
-import org.onosproject.net.config.NetworkConfigListener;
-import org.onosproject.net.config.NetworkConfigRegistry;
-import org.onosproject.net.config.NetworkConfigService;
+import org.onosproject.net.config.*;
 import org.onosproject.net.config.basics.SubjectFactories;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.IetfDmmFpcagentService;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ErrorTypeId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.Result;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configure.DefaultConfigureInput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configure.DefaultConfigureOutput;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configurebundles.DefaultConfigureBundlesInput;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configurebundles.DefaultConfigureBundlesOutput;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configurebundles.configurebundlesoutput.Bundles;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configurebundles.configurebundlesoutput.DefaultBundles;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configuredpn.DefaultConfigureDpnInput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configuredpn.DefaultConfigureDpnOutput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.CreateOrUpdate;
@@ -47,17 +43,12 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.o
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.result.ResultEnum;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbody.resulttype.DefaultErr;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbodydpn.resulttype.DefaultEmptyCase;
-import org.onosproject.yang.model.DefaultModelObjectData;
-import org.onosproject.yang.model.ModelConverter;
-import org.onosproject.yang.model.ModelObject;
-import org.onosproject.yang.model.ResourceData;
-import org.onosproject.yang.model.RpcInput;
-import org.onosproject.yang.model.RpcOutput;
-import org.onosproject.yang.model.RpcRegistry;
+import org.onosproject.yang.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static org.onosproject.fpcagent.FpcUtil.*;
 
@@ -166,10 +157,10 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
 
     @Override
     public RpcOutput configureDpn(RpcInput rpcInput) {
+        Stopwatch timer = Stopwatch.createStarted();
         DefaultConfigureDpnOutput output = new DefaultConfigureDpnOutput();
         output.result(Result.of(ResultEnum.OK));
         output.resultType(new DefaultEmptyCase());
-
         try {
             tenantService.getModelObjects(rpcInput.data(), configureDpn).forEach(
                     modelObject -> {
@@ -189,17 +180,17 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
         } catch (Exception e) {
             log.error(ExceptionUtils.getFullStackTrace(e));
         }
-
         ResourceData dataNode = modelConverter.createDataNode(
                 DefaultModelObjectData.builder().addModelObject(output).build()
         );
+        log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
         return new RpcOutput(RpcOutput.Status.RPC_SUCCESS, dataNode.dataNodes().get(0));
     }
 
     @Override
     public RpcOutput configure(RpcInput rpcInput) {
+        Stopwatch timer = Stopwatch.createStarted();
         DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
-
         try {
             for (ModelObject modelObject : tenantService.getModelObjects(rpcInput.data(), configure)) {
                 DefaultConfigureInput input = (DefaultConfigureInput) modelObject;
@@ -239,18 +230,69 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
             configureOutput.result(Result.of(ResultEnum.ERR));
             log.error(ExceptionUtils.getFullStackTrace(e));
         }
-
         ResourceData dataNode = modelConverter.createDataNode(
                 DefaultModelObjectData.builder()
                         .addModelObject(configureOutput)
                         .build()
         );
+        log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
         return new RpcOutput(RpcOutput.Status.RPC_SUCCESS, dataNode.dataNodes().get(0));
     }
 
     @Override
     public RpcOutput configureBundles(RpcInput rpcInput) {
-        return null;
+        Stopwatch timer = Stopwatch.createStarted();
+        DefaultConfigureBundlesOutput configureBundlesOutput = new DefaultConfigureBundlesOutput();
+        try {
+            for (ModelObject modelObject : tenantService.getModelObjects(rpcInput.data(), configureBundles)) {
+                DefaultConfigureBundlesInput input = (DefaultConfigureBundlesInput) modelObject;
+                input.bundles().forEach(
+                        bundle -> {
+                            DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
+                            switch (bundle.opType()) {
+                                case CREATE:
+                                    configureOutput = tenantService.configureCreate(
+                                            (CreateOrUpdate) bundle.opBody(),
+                                            bundle.clientId(),
+                                            bundle.opId()
+                                    );
+                                    break;
+                                case UPDATE:
+                                    configureOutput = tenantService.configureUpdate(
+                                            (CreateOrUpdate) bundle.opBody(),
+                                            bundle.clientId(),
+                                            bundle.opId()
+                                    );
+                                    break;
+                                case QUERY:
+                                    break;
+                                case DELETE:
+                                    configureOutput = tenantService.configureDelete(
+                                            (DeleteOrQuery) bundle.opBody(),
+                                            bundle.clientId(),
+                                            bundle.opId()
+                                    );
+                                    break;
+                            }
+                            Bundles result = new DefaultBundles();
+                            result.opId(bundle.opId());
+                            result.result(configureOutput.result());
+                            result.resultType(configureOutput.resultType());
+                            configureBundlesOutput.addToBundles(result);
+                        }
+                );
+            }
+        } catch (Exception e) {
+            // if there is an exception respond with an error.
+            log.error(ExceptionUtils.getFullStackTrace(e));
+        }
+        ResourceData dataNode = modelConverter.createDataNode(
+                DefaultModelObjectData.builder()
+                        .addModelObject(configureBundlesOutput)
+                        .build()
+        );
+        log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
+        return new RpcOutput(RpcOutput.Status.RPC_SUCCESS, dataNode.dataNodes().get(0));
     }
 
     @Override
