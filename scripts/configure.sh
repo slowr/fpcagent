@@ -1,6 +1,30 @@
 #!/bin/bash
 
-if [ "$#" -eq 3 ]; then
+if [ "$#" -eq 2 ] && [ $1 == "delete" ]; then
+    echo ""
+    json='{
+            "input": {
+                "op-id": '$2',
+                "targets": [
+                    {
+                        "target": "/ietf-dmm-fpcagent:tenants/tenant=default/fpc-mobility/contexts='$2'"
+                    }
+                ],
+                "client-id": "1",
+                "session-state": "complete",
+                "admin-state": "enabled",
+                "op-type": "'$1'",
+                "op-ref-scope": "none"
+            }
+        }'
+
+    curl -X POST \
+        --header 'Content-Type: application/json' \
+        -u onos:rocks \
+        --header 'Accept: application/json' \
+        -d "$json" \
+        'http://localhost:8181/onos/restconf/operations/ietf-dmm-fpcagent:configure' | python -m json.tool
+elif [ "$#" -eq 3 ] && [ $1 == "create" ]; then
     echo ""
     json='{
             "input": {
@@ -46,7 +70,7 @@ if [ "$#" -eq 3 ]; then
                         }
                     }
                 ],
-                "op-id": "1",
+                "op-id": '$2',
                 "op-ref-scope": "op",
                 "op-type": "'$1'",
                 "session-state": "complete"
@@ -61,5 +85,5 @@ if [ "$#" -eq 3 ]; then
         'http://localhost:8181/onos/restconf/operations/ietf-dmm-fpcagent:configure' | python -m json.tool
     echo ""
 else
-    echo "usage: "$0" type contextId dpnId"
+    echo "usage: "$0" type contextId"
 fi

@@ -22,6 +22,7 @@ import org.apache.felix.scr.annotations.*;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
+import org.onosproject.fpcagent.util.CacheManager;
 import org.onosproject.fpcagent.util.ConfigHelper;
 import org.onosproject.fpcagent.workers.ZMQSBPublisherManager;
 import org.onosproject.fpcagent.workers.ZMQSBSubscriberManager;
@@ -184,6 +185,10 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                 DefaultModelObjectData.builder().addModelObject(output).build()
         );
         log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
+        log.debug("Stats:\nContexts: {}\nDpns: {}",
+                CacheManager.getInstance().contextsCache.stats(),
+                CacheManager.getInstance().dpnsCache.stats()
+        );
         return new RpcOutput(RpcOutput.Status.RPC_SUCCESS, dataNode.dataNodes().get(0));
     }
 
@@ -224,7 +229,7 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
         } catch (Exception e) {
             // if there is an exception respond with an error.
             DefaultErr defaultErr = new DefaultErr();
-            defaultErr.errorInfo(ExceptionUtils.getMessage(e));
+            defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
             defaultErr.errorTypeId(ErrorTypeId.of(0));
             configureOutput.resultType(defaultErr);
             configureOutput.result(Result.of(ResultEnum.ERR));
@@ -236,6 +241,10 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                         .build()
         );
         log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
+        log.debug("Stats:\nContexts: {}\nDpns: {}",
+                CacheManager.getInstance().contextsCache.stats(),
+                CacheManager.getInstance().dpnsCache.stats()
+        );
         return new RpcOutput(RpcOutput.Status.RPC_SUCCESS, dataNode.dataNodes().get(0));
     }
 
@@ -292,6 +301,10 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                         .build()
         );
         log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
+        log.debug("Stats:\nContexts: {}\nDpns: {}",
+                CacheManager.getInstance().contextsCache.stats(),
+                CacheManager.getInstance().dpnsCache.stats()
+        );
         return new RpcOutput(RpcOutput.Status.RPC_SUCCESS, dataNode.dataNodes().get(0));
     }
 

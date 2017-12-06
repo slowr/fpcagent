@@ -148,6 +148,16 @@ public class TenantManager implements TenantService {
                 .findFirst();
     }
 
+    public Optional<DefaultTenant> getDefaultTenant() {
+        Filter filter = Filter.builder().build();
+        DataNode dataNode = dynamicConfigService.readNode(defaultTenant, filter);
+
+        return getModelObjects(dataNode, tenants)
+                .stream()
+                .map(modelObject -> (DefaultTenant) modelObject)
+                .findFirst();
+    }
+
     @Override
     public Optional<DefaultTenant> getTenant(ClientIdentifier clientId) {
         return Optional.ofNullable(clientIdMap.get(clientId));
@@ -289,7 +299,8 @@ public class TenantManager implements TenantService {
                                     .addChild(DefaultFpcMobility.class)
                                     .build();
                             createNode(convertContext, modelObjectId);
-                            cacheManager.contextsCache.invalidate(context.contextId());
+//                            cacheManager.contextsCache.invalidate(context.contextId());
+                            cacheManager.contextsCache.put(convertContext.contextId(), Optional.of(convertContext));
                         }));
 
                         if (commands.contains("downlink")) {
@@ -308,28 +319,15 @@ public class TenantManager implements TenantService {
                                         .addChild(DefaultFpcMobility.class)
                                         .build();
                                 createNode(convertContext, modelObjectId);
-                                cacheManager.contextsCache.invalidate(context.contextId());
+//                                cacheManager.contextsCache.invalidate(context.contextId());
+                                cacheManager.contextsCache.put(convertContext.contextId(), Optional.of(convertContext));
                             }));
                         }
                     } else if (commands.contains("indirect-forward")) {
                         // TODO - Modify API for Indirect Forwarding to/from another SGW
                     } else if (commands.contains("uplink")) {
-//                                    tasks.add(Executors.callable(() -> {
-//                                        dpnCommunicationService.create_bearer_ul(
-//                                                topic_id,
-//                                                imsi,
-//                                                lbi,
-//                                                default_ebi,
-//                                                ulLocalAddress,
-//                                                s1u_sgw_gtpu_teid
-//                                        );
-//
-//                                        getDefaultTenant().ifPresent(
-//                                                tenant -> tenant.fpcMobility().addToContexts(convertContext(context))
-//                                        );
-//                                    }));
+                        // TODO create bearer ul
                     }
-
                 }
             }
 
@@ -353,7 +351,7 @@ public class TenantManager implements TenantService {
             log.error(ExceptionUtils.getFullStackTrace(e));
             DefaultErr defaultErr = new DefaultErr();
             configureOutput.resultType(defaultErr);
-            defaultErr.errorInfo(ExceptionUtils.getMessage(e));
+            defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
             defaultErr.errorTypeId(ErrorTypeId.of(0));
         }
         return configureOutput;
@@ -438,15 +436,11 @@ public class TenantManager implements TenantService {
                                         .addChild(DefaultFpcMobility.class)
                                         .build();
                                 updateNode(convertContext, modelObjectId);
-                                cacheManager.contextsCache.invalidate(context.contextId());
+//                                cacheManager.contextsCache.invalidate(context.contextId());
+                                cacheManager.contextsCache.put(convertContext.contextId(), Optional.of(convertContext));
                             }));
                         } else {
-//                                        tasks.add(Executors.callable(() ->
-//                                                dpnCommunicationService.delete_bearer(
-//                                                        topic_id,
-//                                                        s1u_enb_gtpu_teid
-//                                                )
-//                                        ));
+                            // TODO delete bearer
                         }
                     }
                     if (commands.contains("uplink")) {
@@ -466,15 +460,11 @@ public class TenantManager implements TenantService {
                                         .addChild(DefaultFpcMobility.class)
                                         .build();
                                 updateNode(convertContext, modelObjectId);
-                                cacheManager.contextsCache.invalidate(context.contextId());
+//                                cacheManager.contextsCache.invalidate(context.contextId());
+                                cacheManager.contextsCache.put(convertContext.contextId(), Optional.of(convertContext));
                             }));
                         } else {
-//                                        tasks.add(Executors.callable(() ->
-//                                                dpnCommunicationService.delete_bearer(
-//                                                        topic_id,
-//                                                        s1u_sgw_gtpu_teid
-//                                                )
-//                                        ));
+                            // TODO delete bearer
                         }
                     }
 
@@ -502,7 +492,7 @@ public class TenantManager implements TenantService {
             // if there is an exception respond with an error.
             log.error(ExceptionUtils.getFullStackTrace(e));
             DefaultErr defaultErr = new DefaultErr();
-            defaultErr.errorInfo(ExceptionUtils.getMessage(e));
+            defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
             defaultErr.errorTypeId(ErrorTypeId.of(0));
             configureOutput.resultType(defaultErr);
             configureOutput.result(Result.of(ResultEnum.ERR));
@@ -592,6 +582,7 @@ public class TenantManager implements TenantService {
                                     .addChild(DefaultContexts.class, contextsKeys)
                                     .build());
                             dynamicConfigService.deleteNode(resourceVal);
+                            cacheManager.contextsCache.invalidate(context.contextId());
                         }));
                     }
                 }
@@ -618,7 +609,7 @@ public class TenantManager implements TenantService {
             log.error(ExceptionUtils.getFullStackTrace(e));
             DefaultErr defaultErr = new DefaultErr();
             configureOutput.resultType(defaultErr);
-            defaultErr.errorInfo(ExceptionUtils.getMessage(e));
+            defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
             defaultErr.errorTypeId(ErrorTypeId.of(0));
         }
 
@@ -671,7 +662,15 @@ public class TenantManager implements TenantService {
 //                                Filter filter = Filter.builder().build();
 //                                DataNode node = dynamicConfigService.readNode(FpcUtil.tenants, filter);
 //                                getModelObjects(node, null).forEach(
-//                                        modelObject -> fpcAgentData.tenants((DefaultTenants) modelObject)
+//                                        modelObject -> {
+//                                            DefaultTenants tenants = (DefaultTenants) modelObject;
+//                                            tenants.tenant()
+//                                                    .parallelStream()
+//                                                    .forEach(tenant -> cacheManager.tenantCache.put(
+//                                                            tenant.tenantId(),
+//                                                            Optional.of((DefaultTenant) tenant))
+//                                                    );
+//                                        }
 //                                );
                                 break;
                             default:
@@ -696,10 +695,6 @@ public class TenantManager implements TenantService {
          * @return true if event is supported; false otherwise
          */
         private boolean isSupported(DynamicConfigEvent event) {
-//            ResourceId rsId = event.subject();
-//            List<NodeKey> storeKeys = rsId.nodeKeys();
-//            List<NodeKey> tenantKeys = FpcUtil.tenants.nodeKeys();
-//            return storeKeys.size() >= 2 && storeKeys.get(0).equals(tenantKeys.get(1));
             return true;
         }
 
