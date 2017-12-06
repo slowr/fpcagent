@@ -3,7 +3,7 @@ package org.onosproject.fpcagent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.onosproject.core.ApplicationId;
-import org.onosproject.fpcagent.helpers.ConfigHelper;
+import org.onosproject.fpcagent.util.ConfigHelper;
 import org.onosproject.net.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

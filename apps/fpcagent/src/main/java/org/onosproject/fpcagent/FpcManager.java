@@ -22,7 +22,7 @@ import org.apache.felix.scr.annotations.*;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.fpcagent.helpers.ConfigHelper;
+import org.onosproject.fpcagent.util.ConfigHelper;
 import org.onosproject.fpcagent.workers.ZMQSBPublisherManager;
 import org.onosproject.fpcagent.workers.ZMQSBSubscriberManager;
 import org.onosproject.net.config.*;
@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-import static org.onosproject.fpcagent.FpcUtil.*;
+import static org.onosproject.fpcagent.util.FpcUtil.*;
 
 /**
  * Fpc Manager.

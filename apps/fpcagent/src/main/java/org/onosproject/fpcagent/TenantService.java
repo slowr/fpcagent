@@ -50,13 +50,6 @@ public interface TenantService {
     List<ModelObject> getModelObjects(DataNode dataNode, ResourceId appId);
 
     /**
-     * Returns the Default Tenant.
-     *
-     * @return Optional Default Tenant
-     */
-    Optional<DefaultTenant> getDefaultTenant();
-
-    /**
      * Get Tenant by its Identifier.
      *
      * @param tenantId Tenant Identifier

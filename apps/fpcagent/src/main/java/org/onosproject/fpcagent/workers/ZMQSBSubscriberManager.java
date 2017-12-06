@@ -1,7 +1,7 @@
 package org.onosproject.fpcagent.workers;
 
 import org.apache.commons.lang.exception.ExceptionUtils;
-import org.onosproject.fpcagent.FpcUtil;
+import org.onosproject.fpcagent.util.FpcUtil;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.yangautoprefixnotify.value.DownlinkDataNotification;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnId;
 import org.slf4j.Logger;
@@ -16,7 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static org.onosproject.fpcagent.helpers.Converter.*;
+import static org.onosproject.fpcagent.util.Converter.*;
 
 public class ZMQSBSubscriberManager implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(ZMQSBSubscriberManager.class);

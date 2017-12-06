@@ -16,7 +16,6 @@
 
 package org.onosproject.fpcagent;
 
-import com.google.common.base.Stopwatch;
 import com.google.common.collect.Maps;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -29,8 +28,10 @@ import org.onosproject.config.DynamicConfigEvent;
 import org.onosproject.config.DynamicConfigListener;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.config.Filter;
-import org.onosproject.fpcagent.helpers.DpnCommunicationService;
-import org.onosproject.fpcagent.helpers.DpnNgicCommunicator;
+import org.onosproject.fpcagent.util.CacheManager;
+import org.onosproject.fpcagent.util.DpnCommunicationService;
+import org.onosproject.fpcagent.util.DpnNgicCommunicator;
+import org.onosproject.fpcagent.util.FpcUtil;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.*;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configure.DefaultConfigureOutput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.instructions.instructions.instrtype.Instr3GppMob;
@@ -47,6 +48,7 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.t
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.DefaultFpcTopology;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.ContextsKeys;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.DefaultContexts;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcContextId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcIdentity;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.fpccontext.Dpns;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.mobilityinfo.mobprofileparameters.ThreegppTunnel;
@@ -63,12 +65,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.onosproject.fpcagent.FpcUtil.*;
-import static org.onosproject.fpcagent.helpers.Converter.convertContext;
+import static org.onosproject.fpcagent.util.Converter.convertContext;
+import static org.onosproject.fpcagent.util.FpcUtil.*;
 
 @Component(immediate = true)
 @Service
 public class TenantManager implements TenantService {
+
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final Map<ClientIdentifier, DefaultTenant> clientIdMap = Maps.newHashMap();
@@ -85,8 +88,11 @@ public class TenantManager implements TenantService {
 
     private DpnCommunicationService dpnCommunicationService;
 
+    private CacheManager cacheManager = CacheManager.getInstance();
+
     @Activate
     protected void activate() {
+        cacheManager.addManager(this);
         FpcUtil.modelConverter = modelConverter;
         getResourceId();
 
@@ -121,18 +127,6 @@ public class TenantManager implements TenantService {
     }
 
     @Override
-    public Optional<DefaultTenant> getDefaultTenant() {
-        Filter filter = Filter.builder().build();
-        // TODO implement Cache to avoid searching store
-        DataNode dataNode = dynamicConfigService.readNode(defaultTenant, filter);
-
-        return getModelObjects(dataNode, tenants)
-                .stream()
-                .map(modelObject -> (DefaultTenant) modelObject)
-                .findFirst();
-    }
-
-    @Override
     public Optional<DefaultTenants> getTenants() {
         Filter filter = Filter.builder().build();
         DataNode dataNode = dynamicConfigService.readNode(tenants, filter);
@@ -150,16 +144,8 @@ public class TenantManager implements TenantService {
 
         return getModelObjects(dataNode, tenants)
                 .stream()
-                .map(modelObject -> (DefaultTenants) modelObject)
-                .findFirst()
-                .flatMap(defaultTenants ->
-                        defaultTenants.tenant()
-                                .stream()
-                                .filter(defaultTenant ->
-                                        defaultTenant.tenantId().equals(tenantId))
-                                .findFirst()
-                                .map(defaultTenant -> (DefaultTenant) defaultTenant)
-                );
+                .map(modelObject -> (DefaultTenant) modelObject)
+                .findFirst();
     }
 
     @Override
@@ -225,113 +211,109 @@ public class TenantManager implements TenantService {
                 defaultCommonSuccess.addToContexts(context);
 
                 // check if mobility exists and if the context id exists.
-                if (getDefaultTenant().map(
-                        tenant -> tenant.fpcMobility().contexts() != null && tenant.fpcMobility()
-                                .contexts()
-                                .stream()
-                                .anyMatch(contexts -> contexts.contextId().equals(context.contextId()))
-                ).orElse(false)) {
+                if (cacheManager.contextsCache.get(context.contextId()).isPresent()) {
                     // throw exception if trying to create a Context that already exists.
                     throw new IllegalStateException("Context tried to create already exists. Please issue update operation..");
                 }
 
                 for (Dpns dpn : context.dpns()) {
                     // check if dpns exists and if there is a DPN registered for the wanted identifier.
-                    if (getDefaultTenant().map(
-                            tenant -> tenant.fpcTopology().dpns() == null ||
-                                    tenant.fpcTopology().dpns().stream()
-                                            .noneMatch(dpns -> dpns.dpnId().equals(dpn.dpnId()))
-                    ).orElse(false)) {
+                    if (!cacheManager.dpnsCache.get(dpn.dpnId()).isPresent()) {
                         // throw exception if DPN ID is not registered.
                         throw new IllegalStateException("DPN ID is not registered to the topology.");
                     }
 
                     // handle only 3GPP instructions.
-                    if (context.instructions().instrType() instanceof Instr3GppMob) {
-                        // from DPN ID find the Network and Node Identifiers
-                        Optional<String> key = getDefaultTenant().flatMap(tenant ->
-                                tenant.fpcTopology()
-                                        .dpns()
-                                        .stream()
-                                        .filter(dpns -> dpns.dpnId().equals(dpn.dpnId()))
-                                        .findFirst()
-                                        .map(node -> node.nodeId() + "/" + node.networkId())
-                        );
+                    if (!(context.instructions().instrType() instanceof Instr3GppMob)) {
+                        throw new IllegalArgumentException("No 3GPP instructions where given.");
+                    }
 
-                        if (key.isPresent()) {
-                            // get DPN Topic from Node/Network pair
-                            Short topic_id = getTopicFromNode(key.get());
+                    // from DPN ID find the Network and Node Identifiers
+                    Optional<String> key = cacheManager.dpnsCache.get(dpn.dpnId())
+                            .map(node -> node.nodeId() + "/" + node.networkId());
+                    if (!key.isPresent()) {
+                        throw new IllegalArgumentException("DPN does not have node and network ID defined.");
+                    }
 
-                            if (topic_id != null) {
-                                Instr3GppMob instr3GppMob = (Instr3GppMob) context.instructions().instrType();
-                                String commands = Bits.toString(instr3GppMob.instr3GppMob().bits());
+                    // get DPN Topic from Node/Network pair
+                    Short topic_id = getTopicFromNode(key.get());
+                    if (topic_id == null) {
+                        throw new IllegalArgumentException("Could not find Topic ID");
+                    }
 
-                                Ip4Address s1u_enodeb_ipv4 = Ip4Address.valueOf(context.ul().tunnelLocalAddress().toString()),
-                                        s1u_sgw_ipv4 = Ip4Address.valueOf(context.ul().tunnelRemoteAddress().toString());
+                    // parse tunnel identifiers. throw exception if mobility profile parameters are missing.
+                    if (!(context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel)) {
+                        throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
 
-                                long s1u_sgw_gtpu_teid, s1u_enb_gtpu_teid,
-                                        client_id = clientId.fpcIdentity().union().int64(),
-                                        session_id = context.contextId().fpcIdentity().union().int64();
+                    }
+                    if (!(context.dl().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel)) {
+                        throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
+                    }
 
-                                BigInteger op_id = operationId.uint64(),
-                                        imsi = context.imsi().uint64();
+                    // Extract variables
+                    Instr3GppMob instr3GppMob = (Instr3GppMob) context.instructions().instrType();
+                    String commands = Bits.toString(instr3GppMob.instr3GppMob().bits());
 
-                                short default_ebi = context.ebi().uint8();
+                    Ip4Address s1u_enodeb_ipv4 = Ip4Address.valueOf(context.ul().tunnelLocalAddress().toString()),
+                            s1u_sgw_ipv4 = Ip4Address.valueOf(context.ul().tunnelRemoteAddress().toString());
 
-                                // parse tunnel identifiers. throw exception if mobility profile parameters are missing.
-                                if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
-                                    s1u_sgw_gtpu_teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
-                                } else {
-                                    throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
-                                }
-                                if (context.dl().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
-                                    s1u_enb_gtpu_teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
-                                } else {
-                                    throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
-                                }
+                    long client_id = clientId.fpcIdentity().union().int64(),
+                            session_id = context.contextId().fpcIdentity().union().int64(),
+                            s1u_sgw_gtpu_teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters()
+                                    .mobprofileParameters()).tunnelIdentifier(),
+                            s1u_enb_gtpu_teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters()
+                                    .mobprofileParameters()).tunnelIdentifier();
 
-                                // TODO try to make sense out of this...
-                                if (commands.contains("session")) {
-                                    tasks.add(Executors.callable(() -> {
-                                        dpnCommunicationService.create_session(
-                                                topic_id,
-                                                imsi,
-                                                default_ebi,
-                                                Ip4Prefix.valueOf(context.delegatingIpPrefixes().get(0).toString()).address(),
-                                                s1u_sgw_gtpu_teid,
-                                                s1u_sgw_ipv4,
-                                                session_id,
-                                                client_id,
-                                                op_id
-                                        );
+                    BigInteger op_id = operationId.uint64(),
+                            imsi = context.imsi().uint64();
 
-                                        ModelObjectId modelObjectId = defaultTenantBuilder()
-                                                .addChild(DefaultFpcMobility.class)
-                                                .build();
-                                        createNode(convertContext(context), modelObjectId);
-                                    }));
+                    short default_ebi = context.ebi().uint8();
 
-                                    if (commands.contains("downlink")) {
-                                        tasks.add(Executors.callable(() -> {
-                                            dpnCommunicationService.modify_bearer(
-                                                    topic_id,
-                                                    s1u_sgw_ipv4,
-                                                    s1u_enb_gtpu_teid,
-                                                    s1u_enodeb_ipv4,
-                                                    session_id,
-                                                    client_id,
-                                                    op_id
-                                            );
+                    // TODO try to make sense out of this...
+                    if (commands.contains("session")) {
+                        DefaultContexts convertContext = convertContext(context);
+                        tasks.add(Executors.callable(() -> {
+                            dpnCommunicationService.create_session(
+                                    topic_id,
+                                    imsi,
+                                    default_ebi,
+                                    Ip4Prefix.valueOf(context.delegatingIpPrefixes().get(0).toString()).address(),
+                                    s1u_sgw_gtpu_teid,
+                                    s1u_sgw_ipv4,
+                                    session_id,
+                                    client_id,
+                                    op_id
+                            );
 
-                                            ModelObjectId modelObjectId = defaultTenantBuilder()
-                                                    .addChild(DefaultFpcMobility.class)
-                                                    .build();
-                                            createNode(convertContext(context), modelObjectId);
-                                        }));
-                                    }
-                                } else if (commands.contains("indirect-forward")) {
-                                    // TODO - Modify API for Indirect Forwarding to/from another SGW
-                                } else if (commands.contains("uplink")) {
+                            ModelObjectId modelObjectId = defaultTenantBuilder()
+                                    .addChild(DefaultFpcMobility.class)
+                                    .build();
+                            createNode(convertContext, modelObjectId);
+                            cacheManager.contextsCache.invalidate(context.contextId());
+                        }));
+
+                        if (commands.contains("downlink")) {
+                            tasks.add(Executors.callable(() -> {
+                                dpnCommunicationService.modify_bearer(
+                                        topic_id,
+                                        s1u_sgw_ipv4,
+                                        s1u_enb_gtpu_teid,
+                                        s1u_enodeb_ipv4,
+                                        session_id,
+                                        client_id,
+                                        op_id
+                                );
+
+                                ModelObjectId modelObjectId = defaultTenantBuilder()
+                                        .addChild(DefaultFpcMobility.class)
+                                        .build();
+                                createNode(convertContext, modelObjectId);
+                                cacheManager.contextsCache.invalidate(context.contextId());
+                            }));
+                        }
+                    } else if (commands.contains("indirect-forward")) {
+                        // TODO - Modify API for Indirect Forwarding to/from another SGW
+                    } else if (commands.contains("uplink")) {
 //                                    tasks.add(Executors.callable(() -> {
 //                                        dpnCommunicationService.create_bearer_ul(
 //                                                topic_id,
@@ -346,16 +328,8 @@ public class TenantManager implements TenantService {
 //                                                tenant -> tenant.fpcMobility().addToContexts(convertContext(context))
 //                                        );
 //                                    }));
-                                }
-                            } else {
-                                throw new IllegalArgumentException("Could not find Topic ID.");
-                            }
-                        } else {
-                            throw new IllegalArgumentException("DPN does not have node and network ID defined.");
-                        }
-                    } else {
-                        throw new IllegalArgumentException("No 3GPP instructions where given.");
                     }
+
                 }
             }
 
@@ -400,127 +374,113 @@ public class TenantManager implements TenantService {
                 defaultCommonSuccess.addToContexts(context);
 
                 // check if contexts are populated and if they include the wanted context to update.
-                if (getDefaultTenant().map(
-                        tenant -> tenant.fpcMobility().contexts() == null ||
-                                tenant.fpcMobility()
-                                        .contexts()
-                                        .parallelStream()
-                                        .noneMatch(contexts -> contexts.contextId().equals(context.contextId()))
-                ).orElse(false)) {
+                if (!cacheManager.contextsCache.get(context.contextId()).isPresent()) {
                     // throw exception if wanted context does not exist.
                     throw new IllegalStateException("Context doesn't exist. Please issue create operation..");
                 }
 
                 for (Dpns dpn : context.dpns()) {
                     // check if dpns exists and if there is a DPN registered for the wanted identifier.
-                    if (getDefaultTenant().map(
-                            tenant -> tenant.fpcTopology().dpns() == null ||
-                                    tenant.fpcTopology().dpns()
-                                            .stream()
-                                            .noneMatch(dpns -> dpns.dpnId().equals(dpn.dpnId()))
-                    ).orElse(false)) {
+                    if (!cacheManager.dpnsCache.get(dpn.dpnId()).isPresent()) {
                         // throw exception if DPN ID is not registered.
                         throw new IllegalStateException("DPN ID is not registered to the topology.");
                     }
 
                     // handle only 3GPP instructions.
-                    if (context.instructions().instrType() instanceof Instr3GppMob) {
-                        // from DPN ID find the Network and Node Identifiers
-                        Optional<String> key = getDefaultTenant().flatMap(tenant ->
-                                tenant.fpcTopology()
-                                        .dpns()
-                                        .stream()
-                                        .filter(dpns -> dpns.dpnId().equals(dpn.dpnId()))
-                                        .findFirst().map(node -> node.nodeId() + "/" + node.networkId())
-                        );
+                    if (!(context.instructions().instrType() instanceof Instr3GppMob)) {
+                        throw new IllegalArgumentException("No 3GPP instructions where given.");
+                    }
 
-                        if (key.isPresent()) {
-                            // get DPN Topic from Node/Network pair
-                            Short topic_id = getTopicFromNode(key.get());
+                    // from DPN ID find the Network and Node Identifiers
+                    Optional<String> key = cacheManager.dpnsCache.get(dpn.dpnId())
+                            .map(node -> node.nodeId() + "/" + node.networkId());
+                    if (!key.isPresent()) {
+                        throw new IllegalArgumentException("DPN does not have node and network ID defined.");
+                    }
 
-                            if (topic_id != null) {
-                                Instr3GppMob instr3GppMob = (Instr3GppMob) context.instructions().instrType();
-                                String commands = Bits.toString(instr3GppMob.instr3GppMob().bits());
+                    // get DPN Topic from Node/Network pair
+                    Short topic_id = getTopicFromNode(key.get());
+                    if (topic_id == null) {
+                        throw new IllegalArgumentException("Could not find Topic ID");
+                    }
 
-                                Ip4Address s1u_enodeb_ipv4 = Ip4Address.valueOf(context.ul().tunnelLocalAddress().toString()),
-                                        s1u_sgw_ipv4 = Ip4Address.valueOf(context.ul().tunnelRemoteAddress().toString());
+                    if (!(context.dl().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel)) {
+                        throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
+                    }
 
-                                long s1u_enb_gtpu_teid,
-                                        cId = clientId.fpcIdentity().union().int64(),
-                                        contextId = context.contextId().fpcIdentity().union().int64();
+                    Instr3GppMob instr3GppMob = (Instr3GppMob) context.instructions().instrType();
+                    String commands = Bits.toString(instr3GppMob.instr3GppMob().bits());
 
-                                BigInteger opId = operationId.uint64();
+                    Ip4Address s1u_enodeb_ipv4 = Ip4Address.valueOf(context.ul().tunnelLocalAddress().toString()),
+                            s1u_sgw_ipv4 = Ip4Address.valueOf(context.ul().tunnelRemoteAddress().toString());
 
-                                if (context.dl().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
-                                    s1u_enb_gtpu_teid = ((ThreegppTunnel) context.dl().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
-                                } else {
-                                    throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
-                                }
+                    long s1u_enb_gtpu_teid = ((ThreegppTunnel) context.dl().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier(),
+                            cId = clientId.fpcIdentity().union().int64(),
+                            contextId = context.contextId().fpcIdentity().union().int64();
 
-                                if (commands.contains("downlink")) {
-                                    if (context.dl().lifetime() >= 0L) {
-                                        tasks.add(Executors.callable(() -> {
-                                            dpnCommunicationService.modify_bearer(
-                                                    topic_id,
-                                                    s1u_sgw_ipv4,
-                                                    s1u_enb_gtpu_teid,
-                                                    s1u_enodeb_ipv4,
-                                                    contextId,
-                                                    cId,
-                                                    opId
-                                            );
+                    BigInteger opId = operationId.uint64();
 
-                                            ModelObjectId modelObjectId = defaultTenantBuilder()
-                                                    .addChild(DefaultFpcMobility.class)
-                                                    .build();
-                                            updateNode(convertContext(context), modelObjectId);
-                                        }));
-                                    } else {
+                    DefaultContexts convertContext = convertContext(context);
+                    if (commands.contains("downlink")) {
+                        if (context.dl().lifetime() >= 0L) {
+                            tasks.add(Executors.callable(() -> {
+                                dpnCommunicationService.modify_bearer(
+                                        topic_id,
+                                        s1u_sgw_ipv4,
+                                        s1u_enb_gtpu_teid,
+                                        s1u_enodeb_ipv4,
+                                        contextId,
+                                        cId,
+                                        opId
+                                );
+
+                                ModelObjectId modelObjectId = defaultTenantBuilder()
+                                        .addChild(DefaultFpcMobility.class)
+                                        .build();
+                                updateNode(convertContext, modelObjectId);
+                                cacheManager.contextsCache.invalidate(context.contextId());
+                            }));
+                        } else {
 //                                        tasks.add(Executors.callable(() ->
 //                                                dpnCommunicationService.delete_bearer(
 //                                                        topic_id,
 //                                                        s1u_enb_gtpu_teid
 //                                                )
 //                                        ));
-                                    }
-                                }
-                                if (commands.contains("uplink")) {
-                                    if (context.ul().lifetime() >= 0L) {
-                                        tasks.add(Executors.callable(() -> {
-                                            dpnCommunicationService.modify_bearer(
-                                                    topic_id,
-                                                    s1u_sgw_ipv4,
-                                                    s1u_enb_gtpu_teid,
-                                                    s1u_enodeb_ipv4,
-                                                    contextId,
-                                                    cId,
-                                                    opId
-                                            );
+                        }
+                    }
+                    if (commands.contains("uplink")) {
+                        if (context.ul().lifetime() >= 0L) {
+                            tasks.add(Executors.callable(() -> {
+                                dpnCommunicationService.modify_bearer(
+                                        topic_id,
+                                        s1u_sgw_ipv4,
+                                        s1u_enb_gtpu_teid,
+                                        s1u_enodeb_ipv4,
+                                        contextId,
+                                        cId,
+                                        opId
+                                );
 
-                                            ModelObjectId modelObjectId = defaultTenantBuilder()
-                                                    .addChild(DefaultFpcMobility.class)
-                                                    .build();
-                                            updateNode(convertContext(context), modelObjectId);
-                                        }));
-                                    } else {
+                                ModelObjectId modelObjectId = defaultTenantBuilder()
+                                        .addChild(DefaultFpcMobility.class)
+                                        .build();
+                                updateNode(convertContext, modelObjectId);
+                                cacheManager.contextsCache.invalidate(context.contextId());
+                            }));
+                        } else {
 //                                        tasks.add(Executors.callable(() ->
 //                                                dpnCommunicationService.delete_bearer(
 //                                                        topic_id,
 //                                                        s1u_sgw_gtpu_teid
 //                                                )
 //                                        ));
-                                    }
-                                }
-                            } else {
-                                throw new IllegalArgumentException("Could not find Topic ID");
-                            }
-                        } else {
-                            throw new IllegalArgumentException("DPN does not have node and network ID defined.");
                         }
-                    } else {
-                        throw new IllegalArgumentException("No 3GPP instructions where given.");
                     }
+
+
                 }
+
             }
 
             // execute all tasks.
@@ -569,62 +529,43 @@ public class TenantManager implements TenantService {
                         trgt = s != null ? s : StringUtils.substringAfter(targetStr, "contexts=");
 
                 // find context that this target is about.
-                getDefaultTenant().map(
-                        tenant -> {
-                            if (tenant.fpcMobility().contexts() != null) {
-                                return tenant.fpcMobility()
-                                        .contexts()
-                                        .stream()
-                                        .filter(contexts -> contexts.contextId().toString().equals(trgt))
-                                        .findFirst()
-                                        .orElseThrow(
-                                                () -> new IllegalArgumentException("Context doesn't exist.")
-                                        );
-                            }
-                            throw new IllegalArgumentException("Contexts are empty.");
-                        }
-                ).ifPresent(
-                        context -> context.dpns().forEach(
-                                dpn -> {
-                                    // check if dpns exists and if there is a DPN registered for the wanted identifier.
-                                    if (getDefaultTenant().map(
-                                            tenant -> tenant.fpcTopology().dpns() == null ||
-                                                    tenant.fpcTopology().dpns()
-                                                            .stream()
-                                                            .noneMatch(dpns -> dpns.dpnId().equals(dpn.dpnId()))
-                                    ).orElse(false)) {
-                                        // throw exception if DPN ID is not registered.
-                                        throw new IllegalStateException("DPN ID is not registered to the topology.");
-                                    }
+                FpcContextId fpcContextId = FpcContextId.of(FpcIdentity.fromString(trgt));
+                Optional<DefaultContexts> defaultContexts = cacheManager.contextsCache.get(fpcContextId);
+                if (!defaultContexts.isPresent()) {
+                    throw new IllegalStateException("Context doesn't exist. Please issue create operation..");
+                }
 
-                                    // from DPN ID find the Network and Node Identifiers
-                                    Optional<String> key = getDefaultTenant().flatMap(tenant ->
-                                            tenant.fpcTopology()
-                                                    .dpns()
-                                                    .stream()
-                                                    .filter(dpns -> dpns.dpnId().equals(dpn.dpnId()))
-                                                    .findFirst().map(node -> node.nodeId() + "/" + node.networkId())
-                                    );
+                DefaultContexts context = defaultContexts.get();
+                for (Dpns dpn : context.dpns()) {
+                    // check if dpns exists and if there is a DPN registered for the wanted identifier.
+                    if (!cacheManager.dpnsCache.get(dpn.dpnId()).isPresent()) {
+                        // throw exception if DPN ID is not registered.
+                        throw new IllegalStateException("DPN ID is not registered to the topology.");
+                    }
 
-                                    if (key.isPresent()) {
-                                        // find DPN Topic from Node/Network ID pair.
-                                        Short topic_id = getTopicFromNode(key.get());
+                    // from DPN ID find the Network and Node Identifiers
+                    Optional<String> key = cacheManager.dpnsCache.get(dpn.dpnId())
+                            .map(node -> node.nodeId() + "/" + node.networkId());
+                    if (!key.isPresent()) {
+                        throw new IllegalArgumentException("DPN does not have node and network ID defined.");
+                    }
 
-                                        if (topic_id != null) {
+                    // find DPN Topic from Node/Network ID pair.
+                    Short topic_id = getTopicFromNode(key.get());
+                    if (topic_id == null) {
+                        throw new IllegalArgumentException("Could not find Topic ID");
+                    }
 
-                                            Long teid;
+                    if (!(context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel)) {
+                        throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
+                    }
 
-                                            if (context.ul().mobilityTunnelParameters().mobprofileParameters() instanceof ThreegppTunnel) {
-                                                teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
-                                            } else {
-                                                throw new IllegalArgumentException("mobprofileParameters are not instance of ThreegppTunnel");
-                                            }
+                    Long teid = ((ThreegppTunnel) context.ul().mobilityTunnelParameters().mobprofileParameters()).tunnelIdentifier();
+                    long client_id = clientId.fpcIdentity().union().int64();
+                    BigInteger op_id = operationId.uint64();
 
-                                            long client_id = clientId.fpcIdentity().union().int64();
-                                            BigInteger op_id = operationId.uint64();
-
-                                            // TODO figure out what is going on.
-                                            if (targetStr.endsWith("ul") || targetStr.endsWith("dl")) {
+                    // TODO figure out what is going on.
+                    if (targetStr.endsWith("ul") || targetStr.endsWith("dl")) {
 //                                                tasks.add(Executors.callable(() -> {
 //                                                    dpnCommunicationService.delete_bearer(
 //                                                            topic_id,
@@ -634,37 +575,28 @@ public class TenantManager implements TenantService {
 //                                                    context.dl(null);
 //                                                    context.ul(null);
 //                                                }));
-                                            } else {
-                                                tasks.add(Executors.callable(() -> {
-                                                    dpnCommunicationService.delete_session(
-                                                            topic_id,
-                                                            context.contextId().fpcIdentity().union().int64(),
-                                                            client_id,
-                                                            op_id
-                                                    );
+                    } else {
+                        tasks.add(Executors.callable(() -> {
+                            dpnCommunicationService.delete_session(
+                                    topic_id,
+                                    context.contextId().fpcIdentity().union().int64(),
+                                    client_id,
+                                    op_id
+                            );
 
-                                                    ContextsKeys contextsKeys = new ContextsKeys();
-                                                    contextsKeys.contextId(context.contextId());
+                            ContextsKeys contextsKeys = new ContextsKeys();
+                            contextsKeys.contextId(context.contextId());
 
-                                                    ResourceId resourceVal = getResourceVal(defaultTenantBuilder()
-                                                            .addChild(DefaultFpcMobility.class)
-                                                            .addChild(DefaultContexts.class, contextsKeys)
-                                                            .build());
-                                                    dynamicConfigService.deleteNode(resourceVal);
-                                                }));
-                                            }
-
-                                        } else {
-                                            throw new IllegalArgumentException("Could not find Topic ID");
-                                        }
-                                    } else {
-                                        throw new IllegalArgumentException("DPN does not have node and network ID defined.");
-                                    }
-                                }
-                        )
-                );
-
+                            ResourceId resourceVal = getResourceVal(defaultTenantBuilder()
+                                    .addChild(DefaultFpcMobility.class)
+                                    .addChild(DefaultContexts.class, contextsKeys)
+                                    .build());
+                            dynamicConfigService.deleteNode(resourceVal);
+                        }));
+                    }
+                }
             }
+
 
             // execute all tasks
             ExecutorService executor = Executors.newWorkStealingPool();
