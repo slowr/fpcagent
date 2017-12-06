@@ -23,6 +23,9 @@ import java.util.function.Function;
 
 public class Converter {
     private static final Logger log = LoggerFactory.getLogger(Converter.class);
+    public static Function<String, FpcIdentity> getFpcIdentity = (v) -> new FpcIdentity(new FpcIdentityUnion(v));
+    public static Function<String, ClientIdentifier> getClientIdentity = (v) -> new ClientIdentifier(getFpcIdentity.apply(v));
+
     /**
      * Short to Byte
      *
@@ -111,9 +114,6 @@ public class Converter {
         }
         return value;
     }
-
-    public static Function<String, FpcIdentity> getFpcIdentity = (v) -> new FpcIdentity(new FpcIdentityUnion(v));
-    public static Function<String, ClientIdentifier> getClientIdentity = (v) -> new ClientIdentifier(getFpcIdentity.apply(v));
 
     public static DefaultContexts convertContext(org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.payload.Contexts contexts) {
         DefaultContexts ctx = new DefaultContexts();

@@ -49,9 +49,11 @@ public class FpcUtil {
     public static final String UNKNOWN_EVENT = "FPC Agent listener: unknown event: {}";
     public static final String EVENT_NULL = "Event cannot be null";
     public static final String FPC_APP_ID = "org.onosproject.fpcagent";
-    protected static final Logger log = LoggerFactory.getLogger(FpcUtil.class);
+
+    private static final Logger log = LoggerFactory.getLogger(FpcUtil.class);
     private static final Map<String, FpcDpnId> uplinkDpnMap = Maps.newConcurrentMap();
     private static final Map<String, Short> nodeToTopicMap = Maps.newConcurrentMap();
+
     public static ModelConverter modelConverter = null;
     // Resource ID for Configure DPN RPC command
     public static ResourceId configureDpn;
@@ -65,15 +67,15 @@ public class FpcUtil {
     public static ResourceId registerClientResourceId;
     public static ResourceId deregisterClientResourceId;
 
-    public static FpcIdentity defaultIdentity = getFpcIdentity.apply("default");
+    public static final FpcIdentity defaultIdentity = getFpcIdentity.apply("default");
 
-    private static byte DPN_HELLO = 0b0000_0001;
-    private static byte DPN_BYE = 0b0000_0010;
-    private static byte DOWNLINK_DATA_NOTIFICATION = 0b0000_0101;
-    private static byte DPN_STATUS_INDICATION = 0b0000_1100;
-    private static byte DPN_OVERLOAD_INDICATION = 0b0000_0101;
-    private static byte DPN_REPLY = 0b0000_0100;
-    private static String DOWNLINK_DATA_NOTIFICATION_STRING = "Downlink-Data-Notification";
+    private static final byte DPN_HELLO = 0b0000_0001;
+    private static final byte DPN_BYE = 0b0000_0010;
+    private static final byte DOWNLINK_DATA_NOTIFICATION = 0b0000_0101;
+    private static final byte DPN_STATUS_INDICATION = 0b0000_1100;
+    private static final byte DPN_OVERLOAD_INDICATION = 0b0000_0101;
+    private static final byte DPN_REPLY = 0b0000_0100;
+    private static final String DOWNLINK_DATA_NOTIFICATION_STRING = "Downlink-Data-Notification";
 
     /**
      * Returns resource id from model converter.
@@ -102,12 +104,7 @@ public class FpcUtil {
 
         tenants = getResourceVal(tenantsId);
 
-        TenantKeys tenantKeys = new TenantKeys();
-        tenantKeys.tenantId(defaultIdentity);
-
-        ModelObjectId defaultTenantId = ModelObjectId.builder()
-                .addChild(DefaultTenants.class)
-                .addChild(DefaultTenant.class, tenantKeys)
+        ModelObjectId defaultTenantId = defaultTenantBuilder()
                 .build();
 
         defaultTenant = getResourceVal(defaultTenantId);

@@ -659,19 +659,17 @@ public class TenantManager implements TenantService {
                             case NODE_DELETED:
                             case NODE_UPDATED:
                             case NODE_REPLACED:
-//                                Filter filter = Filter.builder().build();
-//                                DataNode node = dynamicConfigService.readNode(FpcUtil.tenants, filter);
-//                                getModelObjects(node, null).forEach(
-//                                        modelObject -> {
-//                                            DefaultTenants tenants = (DefaultTenants) modelObject;
-//                                            tenants.tenant()
-//                                                    .parallelStream()
-//                                                    .forEach(tenant -> cacheManager.tenantCache.put(
-//                                                            tenant.tenantId(),
-//                                                            Optional.of((DefaultTenant) tenant))
-//                                                    );
-//                                        }
-//                                );
+//                                List<NodeKey> nodeKeys = event.subject().nodeKeys();
+//                                if (nodeKeys.size() >= 4) {
+//                                    NodeKey nodeKey = nodeKeys.get(3);
+//                                    if (nodeKey.schemaId().name().equals("dpns") && nodeKey instanceof ListKey) {
+//                                        Object dpnId = ((ListKey) nodeKey).keyLeafs().get(0).leafValue();
+//                                        cacheManager.dpnsCache.invalidate(FpcDpnId.fromString(dpnId.toString()));
+//                                    } else if (nodeKey.schemaId().name().equals("contexts") && nodeKey instanceof ListKey) {
+//                                        Object contextId = ((ListKey) nodeKey).keyLeafs().get(0).leafValue();
+//                                        cacheManager.contextsCache.invalidate(FpcContextId.fromString(contextId.toString()));
+//                                    }
+//                                }
                                 break;
                             default:
                                 log.warn(UNKNOWN_EVENT, event.type());
@@ -695,7 +693,17 @@ public class TenantManager implements TenantService {
          * @return true if event is supported; false otherwise
          */
         private boolean isSupported(DynamicConfigEvent event) {
-            return true;
+            ResourceId rsId = event.subject();
+            List<NodeKey> storeKeys = rsId.nodeKeys();
+            List<NodeKey> regKeys = tenants.nodeKeys();
+            // store[0] = tenants, reg[0] = /
+            if (storeKeys != null) {
+                int storeSize = storeKeys.size();
+                if (storeSize >= 4) {
+                    return storeKeys.get(0).equals(regKeys.get(1));
+                }
+            }
+            return false;
         }
 
         @Override

@@ -59,6 +59,7 @@ public class CacheManager {
                                         }
                                     }
                                 } catch (Exception e) {
+                                    // let store to populate and retry
                                     Thread.sleep(1000);
                                     return load(fpcContextId);
                                 }
@@ -86,6 +87,7 @@ public class CacheManager {
                                         }
                                     }
                                 } catch (Exception e) {
+                                    // let store to populate and retry
                                     Thread.sleep(1000);
                                     return load(fpcDpnId);
                                 }
@@ -106,6 +108,4 @@ public class CacheManager {
     public void addManager(TenantManager manager) {
         this.tenantManager = manager;
     }
-
-
 }
