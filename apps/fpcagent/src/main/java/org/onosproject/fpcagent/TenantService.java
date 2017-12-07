@@ -63,7 +63,7 @@ public interface TenantService {
     Optional<DefaultTenant> getTenant(ClientIdentifier clientId);
 
     /**
-     * Handles create configure operations that are invoked through RPC.
+     * Handles create Configure operations that are invoked through RPC.
      *
      * @param create      RPC Input converted
      * @param clientInfo    Client Identifier
@@ -77,7 +77,7 @@ public interface TenantService {
     ) throws Exception;
 
     /**
-     * Handles update configure operations that are invoked through RPC.
+     * Handles update Configure operations that are invoked through RPC.
      *
      * @param update      RPC Input converted
      * @param clientInfo    Client Identifier
@@ -91,7 +91,7 @@ public interface TenantService {
     ) throws Exception;
 
     /**
-     * Handles delete configure operations that are invoked through RPC.
+     * Handles delete Configure operations that are invoked through RPC.
      *
      * @param delete      RPC Input converted
      * @param clientInfo    Client Identifier

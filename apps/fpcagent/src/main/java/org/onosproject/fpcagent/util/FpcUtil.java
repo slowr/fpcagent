@@ -116,12 +116,12 @@ public class FpcUtil {
 
         configureDpn = ResourceId.builder()
                 .addBranchPointSchema("/", null)
-                .addBranchPointSchema("configure-dpn", "urn:ietf:params:xml:ns:yang:fpcagent")
+                .addBranchPointSchema("Configure-dpn", "urn:ietf:params:xml:ns:yang:fpcagent")
                 .build();
 
         configureBundles = ResourceId.builder()
                 .addBranchPointSchema("/", null)
-                .addBranchPointSchema("configure-bundles", "urn:ietf:params:xml:ns:yang:fpcagent")
+                .addBranchPointSchema("Configure-bundles", "urn:ietf:params:xml:ns:yang:fpcagent")
                 .build();
 
         registerClient = ResourceId.builder()
