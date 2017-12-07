@@ -98,6 +98,7 @@ public class FpcManager implements IetfDmmFpcagentService,
     /* Variables */
     private FpcConfig fpcConfig;
     private ConcurrentMap<ClientIdentifier, DefaultRegisterClientInput> clientInfo = Maps.newConcurrentMap();
+    private boolean started = false;
 
     /* Config */
     private ConfigFactory<ApplicationId, FpcConfig> fpcConfigConfigFactory =
@@ -125,9 +126,10 @@ public class FpcManager implements IetfDmmFpcagentService,
         configService.removeListener(configListener);
         registry.unregisterConfigFactory(fpcConfigConfigFactory);
 
-        // TODO check if null before closing
-        ZMQSBSubscriberManager.getInstance().close();
-        ZMQSBPublisherManager.getInstance().close();
+        if (started) {
+            ZMQSBSubscriberManager.getInstance().close();
+            ZMQSBPublisherManager.getInstance().close();
+        }
 
         rpcRegistry.unregisterRpcService(this);
 
@@ -142,6 +144,7 @@ public class FpcManager implements IetfDmmFpcagentService,
     private void init() {
         fpcConfig.getConfig().ifPresent(
                 helper -> {
+                    started = true;
                     ZMQSBSubscriberManager.createInstance(
                             helper.dpnSubscriberUri(),
                             helper.zmqBroadcastAll(),
@@ -317,6 +320,7 @@ public class FpcManager implements IetfDmmFpcagentService,
     @Override
     public RpcOutput eventRegister(RpcInput rpcInput) {
         Stopwatch timer = Stopwatch.createStarted();
+        // TODO implement
         log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
         return null;
     }
@@ -324,6 +328,7 @@ public class FpcManager implements IetfDmmFpcagentService,
     @Override
     public RpcOutput eventDeregister(RpcInput rpcInput) {
         Stopwatch timer = Stopwatch.createStarted();
+        // TODO implement
         log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
         return null;
     }
@@ -331,6 +336,7 @@ public class FpcManager implements IetfDmmFpcagentService,
     @Override
     public RpcOutput probe(RpcInput rpcInput) {
         Stopwatch timer = Stopwatch.createStarted();
+        // TODO implement
         log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
         return null;
     }
@@ -354,7 +360,7 @@ public class FpcManager implements IetfDmmFpcagentService,
                 registerClientOutput.supportsAckModel(input.supportsAckModel());
                 registerClientOutput.tenantId(input.tenantId());
 
-//                tenantService.createNode();
+                // TODO create node to DCS
             }
         } catch (Exception e) {
             // if there is an exception respond with an error.
@@ -389,6 +395,8 @@ public class FpcManager implements IetfDmmFpcagentService,
 
                 DefaultConnections defaultConnections = new DefaultConnections();
                 defaultConnections.clientId(input.clientId().toString());
+
+                // TODO delete node from DCS
             }
         } catch (Exception e) {
             // if there is an exception respond with an error.

@@ -154,16 +154,6 @@ public class TenantManager implements TenantService {
                 .findFirst();
     }
 
-    public Optional<DefaultTenant> getDefaultTenant() {
-        Filter filter = Filter.builder().build();
-        DataNode dataNode = dynamicConfigService.readNode(defaultTenant, filter);
-
-        return getModelObjects(dataNode, tenants)
-                .stream()
-                .map(modelObject -> (DefaultTenant) modelObject)
-                .findFirst();
-    }
-
     @Override
     public Optional<DefaultTenant> getTenant(ClientIdentifier clientId) {
         return Optional.empty();
