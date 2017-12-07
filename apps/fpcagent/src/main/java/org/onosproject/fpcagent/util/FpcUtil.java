@@ -63,9 +63,9 @@ public class FpcUtil {
     public static ResourceId tenants;
     public static ResourceId defaultTenant;
     public static ResourceId configureBundles;
+    public static ResourceId registerClient;
+    public static ResourceId deregisterClinet;
     public static ResourceId module;
-    public static ResourceId registerClientResourceId;
-    public static ResourceId deregisterClientResourceId;
 
     public static final FpcIdentity defaultIdentity = getFpcIdentity.apply("default");
 
@@ -123,6 +123,51 @@ public class FpcUtil {
                 .addBranchPointSchema("/", null)
                 .addBranchPointSchema("configure-bundles", "urn:ietf:params:xml:ns:yang:fpcagent")
                 .build();
+
+        registerClient = ResourceId.builder()
+                .addBranchPointSchema("/", null)
+                .addBranchPointSchema("register-client", "urn:onos:params:xml:ns:yang:fpc")
+                .build();
+
+        deregisterClinet = ResourceId.builder()
+                .addBranchPointSchema("/", null)
+                .addBranchPointSchema("deregister-client", "urn:onos:params:xml:ns:yang:fpc")
+                .build();
+    }
+
+    /**
+     * Extract Resource Data from specified DataNode and Resource Id.
+     *
+     * @param dataNode DataNode
+     * @param resId    Resource Identifier
+     * @return Resource Data
+     */
+    public static ResourceData getResourceData(DataNode dataNode, ResourceId resId) {
+        if (resId != null) {
+            return DefaultResourceData.builder()
+                    .addDataNode(dataNode)
+                    .resourceId(resId)
+                    .build();
+        } else {
+            return DefaultResourceData.builder()
+                    .addDataNode(dataNode)
+                    .build();
+        }
+    }
+
+    /**
+     * Returns the resource ID of the parent data node pointed by {@code path}.
+     *
+     * @param path resource ID of the given data node
+     * @return resource ID of the parent data node
+     */
+    public static ResourceId parentOf(ResourceId path) throws Exception {
+        try {
+            return path.copyBuilder().removeLastKey().build();
+        } catch (CloneNotSupportedException e) {
+            log.error("Could not copy {}", path, e);
+            throw new RuntimeException("Could not copy " + path, e);
+        }
     }
 
     public static ModelObjectId.Builder defaultTenantBuilder() {
@@ -148,26 +193,6 @@ public class FpcUtil {
                 .addChild(DefaultTenants.class)
                 .addChild(DefaultTenant.class, tenantKeys)
                 .build());
-    }
-
-    /**
-     * Returns the resource data from the data node and the resource id.
-     *
-     * @param dataNode data node
-     * @param resId    resource id
-     * @return resource data
-     */
-    static ResourceData getResourceData(DataNode dataNode, ResourceId resId) {
-        if (resId != null) {
-            return DefaultResourceData.builder()
-                    .addDataNode(dataNode)
-                    .resourceId(resId)
-                    .build();
-        } else {
-            return DefaultResourceData.builder()
-                    .addDataNode(dataNode)
-                    .build();
-        }
     }
 
     /**

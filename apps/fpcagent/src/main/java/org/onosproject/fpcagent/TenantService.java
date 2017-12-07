@@ -1,10 +1,13 @@
 package org.onosproject.fpcagent;
 
 import com.google.common.annotations.Beta;
+import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.registerclient.DefaultRegisterClientInput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ClientIdentifier;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.DefaultTenants;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.OpIdentifier;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configure.DefaultConfigureOutput;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configuredpn.DefaultConfigureDpnInput;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configuredpn.DefaultConfigureDpnOutput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.CreateOrUpdate;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.DeleteOrQuery;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.DefaultTenant;
@@ -59,49 +62,49 @@ public interface TenantService {
 
     Optional<DefaultTenant> getTenant(ClientIdentifier clientId);
 
-    Optional<DefaultTenant> registerClient(ClientIdentifier clientId, FpcIdentity tenantId);
-
-    Optional<DefaultTenant> deregisterClient(ClientIdentifier clientId);
-
     /**
      * Handles create configure operations that are invoked through RPC.
      *
      * @param create      RPC Input converted
-     * @param clientId    Client Identifier
+     * @param clientInfo    Client Identifier
      * @param operationId Operation Identifier
      * @return Result of the configuration
      */
     DefaultConfigureOutput configureCreate(
             CreateOrUpdate create,
-            ClientIdentifier clientId,
+            DefaultRegisterClientInput clientInfo,
             OpIdentifier operationId
-    );
+    ) throws Exception;
 
     /**
      * Handles update configure operations that are invoked through RPC.
      *
      * @param update      RPC Input converted
-     * @param clientId    Client Identifier
+     * @param clientInfo    Client Identifier
      * @param operationId Operation Identifier
      * @return Result of the configuration
      */
     DefaultConfigureOutput configureUpdate(
             CreateOrUpdate update,
-            ClientIdentifier clientId,
+            DefaultRegisterClientInput clientInfo,
             OpIdentifier operationId
-    );
+    ) throws Exception;
 
     /**
      * Handles delete configure operations that are invoked through RPC.
      *
      * @param delete      RPC Input converted
-     * @param clientId    Client Identifier
+     * @param clientInfo    Client Identifier
      * @param operationId Operation Identifier
      * @return Result of the configuration
      */
     DefaultConfigureOutput configureDelete(
             DeleteOrQuery delete,
-            ClientIdentifier clientId,
+            DefaultRegisterClientInput clientInfo,
             OpIdentifier operationId
-    );
+    ) throws Exception;
+
+    DefaultConfigureDpnOutput configureDpnAdd(DefaultConfigureDpnInput input) throws Exception;
+
+    DefaultConfigureDpnOutput configureDpnRemove(DefaultConfigureDpnInput input) throws Exception;
 }

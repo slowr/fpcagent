@@ -1,9 +1,7 @@
 module ietf-traffic-selector-types {
     yang-version 1;
 
-    namespace
-      "urn:ietf:params:xml:ns:yang:ietf-traffic-selector-types";
-
+    namespace "urn:ietf:params:xml:ns:yang:ietf-traffic-selector-types";
     prefix "ietf-traffic-selectors";
 
     import ietf-inet-types {

@@ -1,9 +1,7 @@
 module ietf-pmip-qos {
     yang-version 1;
 
-    namespace
-      "urn:ietf:params:xml:ns:yang:ietf-pmip-qos";
-
+    namespace "urn:ietf:params:xml:ns:yang:ietf-pmip-qos";
     prefix "qos-pmip";
 
     import ietf-inet-types {

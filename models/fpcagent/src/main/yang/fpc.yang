@@ -161,7 +161,7 @@ module fpc {
         }
       }
       output {
-      	leaf client-id {
+        leaf client-id {
           type fpcagent:client-identifier;
         }
       }

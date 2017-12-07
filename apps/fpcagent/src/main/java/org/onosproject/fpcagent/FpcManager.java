@@ -17,18 +17,23 @@
 package org.onosproject.fpcagent;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.Maps;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.felix.scr.annotations.*;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.fpcagent.util.CacheManager;
 import org.onosproject.fpcagent.util.ConfigHelper;
 import org.onosproject.fpcagent.workers.ZMQSBPublisherManager;
 import org.onosproject.fpcagent.workers.ZMQSBSubscriberManager;
 import org.onosproject.net.config.*;
 import org.onosproject.net.config.basics.SubjectFactories;
+import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.connectioninfo.DefaultConnections;
+import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.deregisterclient.DefaultDeregisterClientOutput;
+import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.registerclient.DefaultRegisterClientInput;
+import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.registerclient.DefaultRegisterClientOutput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.IetfDmmFpcagentService;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ClientIdentifier;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ErrorTypeId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.Result;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configure.DefaultConfigureInput;
@@ -49,6 +54,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 
 import static org.onosproject.fpcagent.util.FpcUtil.*;
@@ -58,7 +64,9 @@ import static org.onosproject.fpcagent.util.FpcUtil.*;
  */
 @Component(immediate = true)
 @Service
-public class FpcManager implements IetfDmmFpcagentService, FpcService {
+public class FpcManager implements IetfDmmFpcagentService,
+        FpcService,
+        org.onosproject.yang.gen.v1.fpc.rev20150105.FpcService {
     private static final Logger log = LoggerFactory.getLogger(FpcManager.class);
 
     private static final Class<FpcConfig> CONFIG_CLASS = FpcConfig.class;
@@ -89,6 +97,7 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
 
     /* Variables */
     private FpcConfig fpcConfig;
+    private ConcurrentMap<ClientIdentifier, DefaultRegisterClientInput> clientInfo = Maps.newConcurrentMap();
 
     /* Config */
     private ConfigFactory<ApplicationId, FpcConfig> fpcConfigConfigFactory =
@@ -121,6 +130,8 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
         ZMQSBPublisherManager.getInstance().close();
 
         rpcRegistry.unregisterRpcService(this);
+
+        clientInfo.clear();
 
         log.info("FPC Agent Stopped");
     }
@@ -159,43 +170,45 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
     @Override
     public RpcOutput configureDpn(RpcInput rpcInput) {
         Stopwatch timer = Stopwatch.createStarted();
-        DefaultConfigureDpnOutput output = new DefaultConfigureDpnOutput();
-        output.result(Result.of(ResultEnum.OK));
-        output.resultType(new DefaultEmptyCase());
+        DefaultConfigureDpnOutput configureDpnOutput = new DefaultConfigureDpnOutput();
+        configureDpnOutput.result(Result.of(ResultEnum.OK));
+        configureDpnOutput.resultType(new DefaultEmptyCase());
+        RpcOutput.Status status = RpcOutput.Status.RPC_SUCCESS;
         try {
-            tenantService.getModelObjects(rpcInput.data(), configureDpn).forEach(
-                    modelObject -> {
-                        DefaultConfigureDpnInput input = (DefaultConfigureDpnInput) modelObject;
-                        String dpnId = input.inputDpnId().fpcIdentity().union().string();
-                        switch (input.operation().enumeration()) {
-                            case ADD:
-                                log.info("Adding DPN {}", dpnId);
-                                // TODO
-                                break;
-                            case REMOVE:
-                                log.info("Removing DPN {}", dpnId);
-                                // TODO
-                                break;
-                        }
-                    });
+            for (ModelObject modelObject : tenantService.getModelObjects(rpcInput.data(), configureDpn)) {
+                DefaultConfigureDpnInput input = (DefaultConfigureDpnInput) modelObject;
+                switch (input.operation().enumeration()) {
+                    case ADD:
+                        configureDpnOutput = tenantService.configureDpnAdd(input);
+                        break;
+                    case REMOVE:
+                        configureDpnOutput = tenantService.configureDpnRemove(input);
+                        break;
+                }
+            }
         } catch (Exception e) {
+            status = RpcOutput.Status.RPC_FAILURE;
+            org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbodydpn.resulttype.DefaultErr defaultErr = new org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.resultbodydpn.resulttype.DefaultErr();
+            defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
+            defaultErr.errorTypeId(ErrorTypeId.of(0));
+            configureDpnOutput.resultType(defaultErr);
+            configureDpnOutput.result(Result.of(ResultEnum.ERR));
             log.error(ExceptionUtils.getFullStackTrace(e));
         }
         ResourceData dataNode = modelConverter.createDataNode(
-                DefaultModelObjectData.builder().addModelObject(output).build()
+                DefaultModelObjectData.builder()
+                        .addModelObject(configureDpnOutput)
+                        .build()
         );
         log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
-        log.debug("Stats:\nContexts: {}\nDpns: {}",
-                CacheManager.getInstance().contextsCache.stats(),
-                CacheManager.getInstance().dpnsCache.stats()
-        );
-        return new RpcOutput(RpcOutput.Status.RPC_SUCCESS, dataNode.dataNodes().get(0));
+        return new RpcOutput(status, dataNode.dataNodes().get(0));
     }
 
     @Override
     public RpcOutput configure(RpcInput rpcInput) {
         Stopwatch timer = Stopwatch.createStarted();
         DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
+        RpcOutput.Status status = RpcOutput.Status.RPC_SUCCESS;
         try {
             for (ModelObject modelObject : tenantService.getModelObjects(rpcInput.data(), configure)) {
                 DefaultConfigureInput input = (DefaultConfigureInput) modelObject;
@@ -203,14 +216,14 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                     case CREATE:
                         configureOutput = tenantService.configureCreate(
                                 (CreateOrUpdate) input.opBody(),
-                                input.clientId(),
+                                clientInfo.get(input.clientId()),
                                 input.opId()
                         );
                         break;
                     case UPDATE:
                         configureOutput = tenantService.configureUpdate(
                                 (CreateOrUpdate) input.opBody(),
-                                input.clientId(),
+                                clientInfo.get(input.clientId()),
                                 input.opId()
                         );
                         break;
@@ -219,7 +232,7 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                     case DELETE:
                         configureOutput = tenantService.configureDelete(
                                 (DeleteOrQuery) input.opBody(),
-                                input.clientId(),
+                                clientInfo.get(input.clientId()),
                                 input.opId()
                         );
                         break;
@@ -228,6 +241,7 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
             }
         } catch (Exception e) {
             // if there is an exception respond with an error.
+            status = RpcOutput.Status.RPC_FAILURE;
             DefaultErr defaultErr = new DefaultErr();
             defaultErr.errorInfo(ExceptionUtils.getFullStackTrace(e));
             defaultErr.errorTypeId(ErrorTypeId.of(0));
@@ -241,58 +255,54 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                         .build()
         );
         log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
-        log.debug("Stats:\nContexts: {}\nDpns: {}",
-                CacheManager.getInstance().contextsCache.stats(),
-                CacheManager.getInstance().dpnsCache.stats()
-        );
-        return new RpcOutput(RpcOutput.Status.RPC_SUCCESS, dataNode.dataNodes().get(0));
+        return new RpcOutput(status, dataNode.dataNodes().get(0));
     }
 
     @Override
     public RpcOutput configureBundles(RpcInput rpcInput) {
         Stopwatch timer = Stopwatch.createStarted();
         DefaultConfigureBundlesOutput configureBundlesOutput = new DefaultConfigureBundlesOutput();
+        RpcOutput.Status status = RpcOutput.Status.RPC_SUCCESS;
         try {
             for (ModelObject modelObject : tenantService.getModelObjects(rpcInput.data(), configureBundles)) {
                 DefaultConfigureBundlesInput input = (DefaultConfigureBundlesInput) modelObject;
-                input.bundles().forEach(
-                        bundle -> {
-                            DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
-                            switch (bundle.opType()) {
-                                case CREATE:
-                                    configureOutput = tenantService.configureCreate(
-                                            (CreateOrUpdate) bundle.opBody(),
-                                            bundle.clientId(),
-                                            bundle.opId()
-                                    );
-                                    break;
-                                case UPDATE:
-                                    configureOutput = tenantService.configureUpdate(
-                                            (CreateOrUpdate) bundle.opBody(),
-                                            bundle.clientId(),
-                                            bundle.opId()
-                                    );
-                                    break;
-                                case QUERY:
-                                    break;
-                                case DELETE:
-                                    configureOutput = tenantService.configureDelete(
-                                            (DeleteOrQuery) bundle.opBody(),
-                                            bundle.clientId(),
-                                            bundle.opId()
-                                    );
-                                    break;
-                            }
-                            Bundles result = new DefaultBundles();
-                            result.opId(bundle.opId());
-                            result.result(configureOutput.result());
-                            result.resultType(configureOutput.resultType());
-                            configureBundlesOutput.addToBundles(result);
-                        }
-                );
+                for (org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configurebundles.configurebundlesinput.Bundles bundle : input.bundles()) {
+                    DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
+                    switch (bundle.opType()) {
+                        case CREATE:
+                            configureOutput = tenantService.configureCreate(
+                                    (CreateOrUpdate) bundle.opBody(),
+                                    clientInfo.get(input.clientId()),
+                                    bundle.opId()
+                            );
+                            break;
+                        case UPDATE:
+                            configureOutput = tenantService.configureUpdate(
+                                    (CreateOrUpdate) bundle.opBody(),
+                                    clientInfo.get(input.clientId()),
+                                    bundle.opId()
+                            );
+                            break;
+                        case QUERY:
+                            break;
+                        case DELETE:
+                            configureOutput = tenantService.configureDelete(
+                                    (DeleteOrQuery) bundle.opBody(),
+                                    clientInfo.get(input.clientId()),
+                                    bundle.opId()
+                            );
+                            break;
+                    }
+                    Bundles result = new DefaultBundles();
+                    result.opId(bundle.opId());
+                    result.result(configureOutput.result());
+                    result.resultType(configureOutput.resultType());
+                    configureBundlesOutput.addToBundles(result);
+                }
             }
         } catch (Exception e) {
             // if there is an exception respond with an error.
+            status = RpcOutput.Status.RPC_FAILURE;
             log.error(ExceptionUtils.getFullStackTrace(e));
         }
         ResourceData dataNode = modelConverter.createDataNode(
@@ -301,26 +311,99 @@ public class FpcManager implements IetfDmmFpcagentService, FpcService {
                         .build()
         );
         log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
-        log.debug("Stats:\nContexts: {}\nDpns: {}",
-                CacheManager.getInstance().contextsCache.stats(),
-                CacheManager.getInstance().dpnsCache.stats()
-        );
-        return new RpcOutput(RpcOutput.Status.RPC_SUCCESS, dataNode.dataNodes().get(0));
+        return new RpcOutput(status, dataNode.dataNodes().get(0));
     }
 
     @Override
     public RpcOutput eventRegister(RpcInput rpcInput) {
+        Stopwatch timer = Stopwatch.createStarted();
+        log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
         return null;
     }
 
     @Override
     public RpcOutput eventDeregister(RpcInput rpcInput) {
+        Stopwatch timer = Stopwatch.createStarted();
+        log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
         return null;
     }
 
     @Override
     public RpcOutput probe(RpcInput rpcInput) {
+        Stopwatch timer = Stopwatch.createStarted();
+        log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
         return null;
+    }
+
+    @Override
+    public RpcOutput registerClient(RpcInput rpcInput) {
+        Stopwatch timer = Stopwatch.createStarted();
+        DefaultRegisterClientOutput registerClientOutput = new DefaultRegisterClientOutput();
+        RpcOutput.Status status = RpcOutput.Status.RPC_SUCCESS;
+
+        try {
+            for (ModelObject modelObject : tenantService.getModelObjects(rpcInput.data(), registerClient)) {
+                DefaultRegisterClientInput input = (DefaultRegisterClientInput) modelObject;
+                if (clientInfo.containsKey(input.clientId())) {
+                    throw new RuntimeException("Client already registered.");
+                }
+                clientInfo.put(input.clientId(), input);
+                registerClientOutput.clientId(input.clientId());
+                registerClientOutput.supportedFeatures(input.supportedFeatures());
+                registerClientOutput.endpointUri(input.endpointUri());
+                registerClientOutput.supportsAckModel(input.supportsAckModel());
+                registerClientOutput.tenantId(input.tenantId());
+
+//                tenantService.createNode();
+            }
+        } catch (Exception e) {
+            // if there is an exception respond with an error.
+            status = RpcOutput.Status.RPC_FAILURE;
+            log.error(ExceptionUtils.getFullStackTrace(e));
+        }
+
+        ResourceData dataNode = modelConverter.createDataNode(
+                DefaultModelObjectData.builder()
+                        .addModelObject(registerClientOutput)
+                        .build()
+        );
+
+        log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
+        return new RpcOutput(status, dataNode.dataNodes().get(0));
+    }
+
+    @Override
+    public RpcOutput deregisterClient(RpcInput rpcInput) {
+        Stopwatch timer = Stopwatch.createStarted();
+        DefaultDeregisterClientOutput deregisterClientOutput = new DefaultDeregisterClientOutput();
+        RpcOutput.Status status = RpcOutput.Status.RPC_SUCCESS;
+
+        try {
+            for (ModelObject modelObject : tenantService.getModelObjects(rpcInput.data(), registerClient)) {
+                DefaultRegisterClientInput input = (DefaultRegisterClientInput) modelObject;
+                if (!clientInfo.containsKey(input.clientId())) {
+                    throw new RuntimeException("Client does not exist.");
+                }
+                clientInfo.remove(input.clientId());
+                deregisterClientOutput.clientId(input.clientId());
+
+                DefaultConnections defaultConnections = new DefaultConnections();
+                defaultConnections.clientId(input.clientId().toString());
+            }
+        } catch (Exception e) {
+            // if there is an exception respond with an error.
+            status = RpcOutput.Status.RPC_FAILURE;
+            log.error(ExceptionUtils.getFullStackTrace(e));
+        }
+
+        ResourceData dataNode = modelConverter.createDataNode(
+                DefaultModelObjectData.builder()
+                        .addModelObject(deregisterClientOutput)
+                        .build()
+        );
+
+        log.debug("Time Elapsed {} ms", timer.stop().elapsed(TimeUnit.MILLISECONDS));
+        return new RpcOutput(status, dataNode.dataNodes().get(0));
     }
 
     private class InternalNetworkConfigListener implements NetworkConfigListener {

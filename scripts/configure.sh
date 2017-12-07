@@ -85,5 +85,5 @@ elif [ "$#" -eq 3 ] && [ $1 == "create" ]; then
         'http://localhost:8181/onos/restconf/operations/ietf-dmm-fpcagent:configure' | python -m json.tool
     echo ""
 else
-    echo "usage: "$0" type contextId"
+    echo "usage: "$0" type (create/delete) contextId (dpnId)"
 fi
