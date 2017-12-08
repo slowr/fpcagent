@@ -28,6 +28,10 @@ module fpc {
       base "fpcbase:fpc-dpn-control-protocol";
     }
 
+    identity p4-dpn-control-protocol {
+      base "fpcbase:fpc-dpn-control-protocol";
+    }
+
     typedef membership-match-type {
       type enumeration {
         enum eq { value 0; }

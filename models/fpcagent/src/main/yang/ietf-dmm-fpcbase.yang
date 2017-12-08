@@ -472,9 +472,11 @@ module ietf-dmm-fpcbase {
         type fpcbase:fpc-identity;
         description "DPN Identifier";
     }
+
     identity fpc-dpn-control-protocol {
         description "DPN Control Protocol";
     }
+
     grouping fpc-dpn {
         leaf dpn-id {
           type fpcbase:fpc-dpn-id;
@@ -502,6 +504,11 @@ module ietf-dmm-fpcbase {
         }
         leaf network-id {
           type string;
+        }
+        leaf control-protocol {
+          type identityref {
+            base "fpcbase:fpc-dpn-control-protocol";
+          }
         }
     }
 

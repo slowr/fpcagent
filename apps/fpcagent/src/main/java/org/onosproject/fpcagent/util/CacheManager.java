@@ -105,7 +105,8 @@ public class CacheManager {
     }
 
     public static CacheManager getInstance(FpcIdentity identity) {
-        return cacheInfo.putIfAbsent(identity, new CacheManager(identity));
+        cacheInfo.putIfAbsent(identity, new CacheManager(identity));
+        return cacheInfo.get(identity);
     }
 
     public static void addManager(TenantManager manager) {

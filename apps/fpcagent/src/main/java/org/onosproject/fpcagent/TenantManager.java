@@ -26,11 +26,10 @@ import org.onlab.packet.Ip4Prefix;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.config.DynamicConfigStore;
 import org.onosproject.config.Filter;
-import org.onosproject.fpcagent.util.CacheManager;
-import org.onosproject.fpcagent.util.DpnCommunicationService;
-import org.onosproject.fpcagent.util.DpnNgicCommunicator;
-import org.onosproject.fpcagent.util.FpcUtil;
+import org.onosproject.fpcagent.util.*;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.DefaultConnectionInfo;
+import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.P4DpnControlProtocol;
+import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.ZmqDpnControlProtocol;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.connectioninfo.DefaultConnections;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.deregisterclient.DefaultDeregisterClientOutput;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.registerclient.DefaultRegisterClientInput;
@@ -59,10 +58,10 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.t
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.DefaultFpcMobility;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.DefaultFpcPolicy;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.DefaultFpcTopology;
-import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.ContextsKeys;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.DefaultContexts;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpctopology.DefaultDpns;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcContextId;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnControlProtocol;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcIdentity;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.fpccontext.Dpns;
@@ -101,8 +100,6 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private RpcRegistry registry;
 
-    private DpnCommunicationService dpnCommunicationService;
-
     private ConcurrentMap<ClientIdentifier, DefaultRegisterClientInput> clientInfo = Maps.newConcurrentMap();
 
     @Activate
@@ -110,8 +107,6 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
         CacheManager.addManager(this);
         FpcUtil.modelConverter = modelConverter;
         getResourceId();
-
-        dpnCommunicationService = new DpnNgicCommunicator();
 
         // Create the Default Tenant and added to the Tenants structure.
         final DefaultTenants tenants = new DefaultTenants();
@@ -216,6 +211,8 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
         Collection<Callable<Object>> tasks = new ArrayList<>();
 
         DefaultCommonSuccess defaultCommonSuccess = new DefaultCommonSuccess();
+        CacheManager cacheManager = CacheManager.getInstance(clientInfo.tenantId());
+
         for (Contexts context : create.contexts()) {
             // add context to response.
             defaultCommonSuccess.addToContexts(context);
@@ -227,11 +224,21 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
             }
 
             for (Dpns dpn : context.dpns()) {
-                CacheManager cacheManager = CacheManager.getInstance(clientInfo.tenantId());
+                Optional<DefaultDpns> optionalDpn = cacheManager.dpnsCache.get(dpn.dpnId());
                 // check if dpns exists and if there is a DPN registered for the wanted identifier.
-                if (!cacheManager.dpnsCache.get(dpn.dpnId()).isPresent()) {
+                if (!optionalDpn.isPresent()) {
                     // throw exception if DPN ID is not registered.
                     throw new RuntimeException("DPN ID is not registered to the topology.");
+                }
+
+                final DpnCommunicationService dpnCommunicationService;
+                Class<? extends FpcDpnControlProtocol> controlProtocol = optionalDpn.get().controlProtocol();
+                if (controlProtocol.isAssignableFrom(ZmqDpnControlProtocol.class)) {
+                    dpnCommunicationService = new DpnNgicCommunicator();
+                } else if (controlProtocol.isAssignableFrom(P4DpnControlProtocol.class)) {
+                    dpnCommunicationService = new DpnP4Communicator();
+                } else {
+                    throw new RuntimeException("Control Protocol is not supported.");
                 }
 
                 // handle only 3GPP instructions.
@@ -240,8 +247,7 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
                 }
 
                 // from DPN ID find the Network and Node Identifiers
-                Optional<String> key = cacheManager.dpnsCache.get(dpn.dpnId())
-                        .map(node -> node.nodeId() + "/" + node.networkId());
+                Optional<String> key = optionalDpn.map(node -> node.nodeId() + "/" + node.networkId());
                 if (!key.isPresent()) {
                     throw new RuntimeException("DPN does not have node and network ID defined.");
                 }
@@ -357,8 +363,8 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
     ) throws Exception {
         DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
         Collection<Callable<Object>> tasks = new ArrayList<>();
-
         DefaultCommonSuccess defaultCommonSuccess = new DefaultCommonSuccess();
+        CacheManager cacheManager = CacheManager.getInstance(clientInfo.tenantId());
         for (Contexts context : update.contexts()) {
             // add updated context to response.
             defaultCommonSuccess.addToContexts(context);
@@ -370,7 +376,6 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
             }
 
             for (Dpns dpn : context.dpns()) {
-                CacheManager cacheManager = CacheManager.getInstance(clientInfo.tenantId());
                 // check if dpns exists and if there is a DPN registered for the wanted identifier.
                 if (!cacheManager.dpnsCache.get(dpn.dpnId()).isPresent()) {
                     // throw exception if DPN ID is not registered.
@@ -414,46 +419,46 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
                 DefaultContexts convertContext = convertContext(context);
                 if (commands.contains("downlink")) {
                     if (context.dl().lifetime() >= 0L) {
-                        tasks.add(Executors.callable(() -> {
-                            dpnCommunicationService.modify_bearer(
-                                    topic_id,
-                                    s1u_sgw_ipv4,
-                                    s1u_enb_gtpu_teid,
-                                    s1u_enodeb_ipv4,
-                                    contextId,
-                                    cId,
-                                    opId
-                            );
-
-                            ModelObjectId modelObjectId = defaultTenantBuilder()
-                                    .addChild(DefaultFpcMobility.class)
-                                    .build();
-                            updateNode(convertContext, modelObjectId);
-                            cacheManager.contextsCache.put(convertContext.contextId(), Optional.of(convertContext));
-                        }));
+//                        tasks.add(Executors.callable(() -> {
+//                            dpnCommunicationService.modify_bearer(
+//                                    topic_id,
+//                                    s1u_sgw_ipv4,
+//                                    s1u_enb_gtpu_teid,
+//                                    s1u_enodeb_ipv4,
+//                                    contextId,
+//                                    cId,
+//                                    opId
+//                            );
+//
+//                            ModelObjectId modelObjectId = defaultTenantBuilder()
+//                                    .addChild(DefaultFpcMobility.class)
+//                                    .build();
+//                            updateNode(convertContext, modelObjectId);
+//                            cacheManager.contextsCache.put(convertContext.contextId(), Optional.of(convertContext));
+//                        }));
                     } else {
                         // TODO delete bearer
                     }
                 }
                 if (commands.contains("uplink")) {
                     if (context.ul().lifetime() >= 0L) {
-                        tasks.add(Executors.callable(() -> {
-                            dpnCommunicationService.modify_bearer(
-                                    topic_id,
-                                    s1u_sgw_ipv4,
-                                    s1u_enb_gtpu_teid,
-                                    s1u_enodeb_ipv4,
-                                    contextId,
-                                    cId,
-                                    opId
-                            );
-
-                            ModelObjectId modelObjectId = defaultTenantBuilder()
-                                    .addChild(DefaultFpcMobility.class)
-                                    .build();
-                            updateNode(convertContext, modelObjectId);
-                            cacheManager.contextsCache.put(convertContext.contextId(), Optional.of(convertContext));
-                        }));
+//                        tasks.add(Executors.callable(() -> {
+//                            dpnCommunicationService.modify_bearer(
+//                                    topic_id,
+//                                    s1u_sgw_ipv4,
+//                                    s1u_enb_gtpu_teid,
+//                                    s1u_enodeb_ipv4,
+//                                    contextId,
+//                                    cId,
+//                                    opId
+//                            );
+//
+//                            ModelObjectId modelObjectId = defaultTenantBuilder()
+//                                    .addChild(DefaultFpcMobility.class)
+//                                    .build();
+//                            updateNode(convertContext, modelObjectId);
+//                            cacheManager.contextsCache.put(convertContext.contextId(), Optional.of(convertContext));
+//                        }));
                     } else {
                         // TODO delete bearer
                     }
@@ -487,7 +492,7 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
     ) throws Exception {
         DefaultConfigureOutput configureOutput = new DefaultConfigureOutput();
         Collection<Callable<Object>> tasks = new ArrayList<>();
-
+        CacheManager cacheManager = CacheManager.getInstance(clientInfo.tenantId());
         DefaultDeleteSuccess defaultDeleteSuccess = new DefaultDeleteSuccess();
         for (Targets target : delete.targets()) {
             defaultDeleteSuccess.addToTargets(target);
@@ -505,7 +510,6 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
 
             DefaultContexts context = defaultContexts.get();
             for (Dpns dpn : context.dpns()) {
-                CacheManager cacheManager = CacheManager.getInstance(clientInfo.tenantId());
                 // check if dpns exists and if there is a DPN registered for the wanted identifier.
                 if (!cacheManager.dpnsCache.get(dpn.dpnId()).isPresent()) {
                     // throw exception if DPN ID is not registered.
@@ -537,25 +541,25 @@ public class TenantManager implements TenantService, IetfDmmFpcagentService, org
                 if (targetStr.endsWith("ul") || targetStr.endsWith("dl")) {
                     // TODO delete bearer
                 } else {
-                    tasks.add(Executors.callable(() -> {
-                        dpnCommunicationService.delete_session(
-                                topic_id,
-                                context.contextId().fpcIdentity().union().int64(),
-                                client_id,
-                                op_id
-                        );
-
-                        ContextsKeys contextsKeys = new ContextsKeys();
-                        contextsKeys.contextId(context.contextId());
-
-                        ResourceId resourceVal = getResourceVal(defaultTenantBuilder()
-                                .addChild(DefaultFpcMobility.class)
-                                .addChild(DefaultContexts.class, contextsKeys)
-                                .build());
-
-                        dynamicConfigService.deleteNode(resourceVal);
-                        cacheManager.contextsCache.put(context.contextId(), Optional.empty());
-                    }));
+//                    tasks.add(Executors.callable(() -> {
+//                        dpnCommunicationService.delete_session(
+//                                topic_id,
+//                                context.contextId().fpcIdentity().union().int64(),
+//                                client_id,
+//                                op_id
+//                        );
+//
+//                        ContextsKeys contextsKeys = new ContextsKeys();
+//                        contextsKeys.contextId(context.contextId());
+//
+//                        ResourceId resourceVal = getResourceVal(defaultTenantBuilder()
+//                                .addChild(DefaultFpcMobility.class)
+//                                .addChild(DefaultContexts.class, contextsKeys)
+//                                .build());
+//
+//                        dynamicConfigService.deleteNode(resourceVal);
+//                        cacheManager.contextsCache.put(context.contextId(), Optional.empty());
+//                    }));
                 }
             }
         }

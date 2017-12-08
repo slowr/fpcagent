@@ -20,6 +20,7 @@ import org.onlab.packet.Ip4Address;
 import org.onlab.packet.Ip4Prefix;
 import org.onosproject.fpcagent.workers.ZMQSBPublisherManager;
 import org.onosproject.fpcagent.workers.ZMQSBSubscriberManager;
+import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.ZmqDpnControlProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,7 +32,7 @@ import static org.onosproject.fpcagent.util.Converter.*;
 /**
  * DPDK DPN API over ZeroMQ for NGIC.
  */
-public class DpnNgicCommunicator implements DpnCommunicationService {
+public class DpnNgicCommunicator extends ZmqDpnControlProtocol implements DpnCommunicationService {
     protected static final Logger log = LoggerFactory.getLogger(DpnNgicCommunicator.class);
 
     @Override
