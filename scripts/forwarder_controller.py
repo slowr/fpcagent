@@ -15,13 +15,13 @@ def main():
 
         # Socket facing clients
         frontend = context.socket(zmq.SUB)
-        frontend.bind("tcp://*:5559")
+        frontend.bind("tcp://*:5555")
         
         frontend.setsockopt(zmq.SUBSCRIBE, "")
         
          # Socket facing services
         backend = context.socket(zmq.PUB)
-        backend.bind("tcp://*:5560")
+        backend.bind("tcp://*:5556")
 
 
         zmq.device(zmq.FORWARDER, frontend, backend)

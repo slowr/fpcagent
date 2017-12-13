@@ -12,7 +12,8 @@ if [ "$#" -eq 1 ]; then
                 ],
                 "node-id": "node'$1'",
                 "network-id": "network'$1'",
-                "control-protocol": "zmq-dpn-control-protocol"
+                "control-protocol": "zmq-dpn-control-protocol",
+                "abstract": false
             }
         ]
     }' 'http://localhost:8181/onos/restconf/data/ietf-dmm-fpcagent:tenants/tenant=default/fpc-topology'
@@ -30,7 +31,8 @@ elif [ "$#" -eq 2 ]; then
                 ],
                 "node-id": "node'$1'",
                 "network-id": "network'$1'",
-                "control-protocol": "zmq-dpn-control-protocol"
+                "control-protocol": "zmq-dpn-control-protocol",
+                "abstract": false
             }
         ]
     }' 'http://localhost:8181/onos/restconf/data/ietf-dmm-fpcagent:tenants/tenant='$2'/fpc-topology'

@@ -62,8 +62,8 @@ def sendAssignId(pub_socket):
 
     print "Ready to receive messages. Press Ctrl+C when ready to exit."
 
-subscriber_uri = "tcp://localhost:5560"
-publisher_uri = "tcp://localhost:5559"
+subscriber_uri = "tcp://localhost:5556"
+publisher_uri = "tcp://localhost:5565"
 # Socket to talk to server
 context = zmq.Context()
 sub_socket = context.socket(zmq.SUB)

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.onosproject.fpcagent.util;
+package org.onosproject.fpcagent.protocols;
 
 import org.onlab.packet.Ip4Address;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.P4DpnControlProtocol;

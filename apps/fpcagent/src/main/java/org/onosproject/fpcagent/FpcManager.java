@@ -48,7 +48,7 @@ public class FpcManager implements FpcService {
 
     /* Services */
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    private TenantService tenantService;
+    private FpcRpcService fpcRpcService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private ModelConverter modelConverter;

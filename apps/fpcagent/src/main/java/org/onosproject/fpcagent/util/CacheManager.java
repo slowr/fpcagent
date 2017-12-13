@@ -20,7 +20,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Maps;
-import org.onosproject.fpcagent.TenantManager;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.DefaultTenant;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.DefaultContexts;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpctopology.DefaultDpns;
@@ -33,6 +32,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
 
+import static org.onosproject.fpcagent.util.FpcUtil.getTenant;
+
 /**
  * Cache Manager.
  */
@@ -44,8 +45,6 @@ public class CacheManager {
     public LoadingCache<FpcContextId, Optional<DefaultContexts>> contextsCache;
     public LoadingCache<FpcDpnId, Optional<DefaultDpns>> dpnsCache;
 
-    private static TenantManager tenantManager;
-
     private CacheManager(FpcIdentity identity) {
         contextsCache = CacheBuilder.newBuilder()
                 .maximumSize(100)
@@ -54,7 +53,7 @@ public class CacheManager {
                             @Override
                             public Optional<DefaultContexts> load(FpcContextId fpcContextId) throws Exception {
                                 try {
-                                    Optional<DefaultTenant> defaultTenant = tenantManager.getTenant(identity);
+                                    Optional<DefaultTenant> defaultTenant = getTenant(identity);
                                     if (defaultTenant.isPresent()) {
                                         DefaultTenant tenant = defaultTenant.get();
                                         log.debug("tenant {}", defaultTenant);
@@ -82,7 +81,7 @@ public class CacheManager {
                             @Override
                             public Optional<DefaultDpns> load(FpcDpnId fpcDpnId) throws Exception {
                                 try {
-                                    Optional<DefaultTenant> defaultTenant = tenantManager.getTenant(identity);
+                                    Optional<DefaultTenant> defaultTenant = getTenant(identity);
                                     if (defaultTenant.isPresent()) {
                                         DefaultTenant tenant = defaultTenant.get();
                                         log.debug("tenant {}", tenant);
@@ -109,7 +108,4 @@ public class CacheManager {
         return cacheInfo.get(identity);
     }
 
-    public static void addManager(TenantManager manager) {
-        tenantManager = manager;
-    }
 }

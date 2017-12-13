@@ -2,8 +2,8 @@
   "apps": {
     "org.onosproject.fpcagent": {
       "fpcagent": {
-        "dpn-subscriber-uri": "tcp://*:5560",
-        "dpn-publisher-uri": "tcp://*:5559",
+        "dpn-subscriber-uri": "tcp://*:5566",
+        "dpn-publisher-uri": "tcp://*:5555",
         "dpn-client-threads": 5,
         "node-id": "node0",
         "network-id": "network1",

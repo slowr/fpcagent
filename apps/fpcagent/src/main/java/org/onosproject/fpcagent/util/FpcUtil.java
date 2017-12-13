@@ -17,6 +17,8 @@
 package org.onosproject.fpcagent.util;
 
 import com.google.common.collect.Maps;
+import org.onosproject.config.DynamicConfigService;
+import org.onosproject.config.Filter;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ClientIdentifier;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.DefaultTenants;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.OpIdentifier;
@@ -32,11 +34,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigInteger;
-import java.util.AbstractMap;
-import java.util.Arrays;
-import java.util.Map;
+import java.util.*;
 
-import static org.onosproject.fpcagent.util.Converter.*;
+import static org.onosproject.fpcagent.util.Converter.fromIntToLong;
+import static org.onosproject.fpcagent.util.Converter.toBigInt;
 
 /**
  * Helper class which stores all the static variables.
@@ -49,26 +50,10 @@ public class FpcUtil {
     public static final String UNKNOWN_EVENT = "FPC Agent listener: unknown event: {}";
     public static final String EVENT_NULL = "Event cannot be null";
     public static final String FPC_APP_ID = "org.onosproject.fpcagent";
-
+    public static final FpcIdentity defaultIdentity = FpcIdentity.fromString("default");
     private static final Logger log = LoggerFactory.getLogger(FpcUtil.class);
     private static final Map<String, FpcDpnId> uplinkDpnMap = Maps.newConcurrentMap();
     private static final Map<String, Short> nodeToTopicMap = Maps.newConcurrentMap();
-
-    public static ModelConverter modelConverter = null;
-    // Resource ID for Configure DPN RPC command
-    public static ResourceId configureDpn;
-    // Resource ID for Configure RPC command
-    public static ResourceId configure;
-    // Resource ID for tenants data
-    public static ResourceId tenants;
-    public static ResourceId defaultTenant;
-    public static ResourceId configureBundles;
-    public static ResourceId registerClient;
-    public static ResourceId deregisterClinet;
-    public static ResourceId module;
-
-    public static final FpcIdentity defaultIdentity = getFpcIdentity.apply("default");
-
     private static final byte DPN_HELLO = 0b0000_0001;
     private static final byte DPN_BYE = 0b0000_0010;
     private static final byte DOWNLINK_DATA_NOTIFICATION = 0b0000_0101;
@@ -76,6 +61,18 @@ public class FpcUtil {
     private static final byte DPN_OVERLOAD_INDICATION = 0b0000_0101;
     private static final byte DPN_REPLY = 0b0000_0100;
     private static final String DOWNLINK_DATA_NOTIFICATION_STRING = "Downlink-Data-Notification";
+    public static DynamicConfigService dynamicConfigService = null;
+    public static ModelConverter modelConverter = null;
+    // Resource ID for Configure DPN RPC command
+    public static ResourceId configureDpn;
+    // Resource ID for Configure RPC command
+    public static ResourceId configure;
+    // Resource ID for tenants data
+    public static ResourceId tenants;
+    public static ResourceId configureBundles;
+    public static ResourceId registerClient;
+    public static ResourceId deregisterClinet;
+    public static ResourceId module;
 
     /**
      * Returns resource id from model converter.
@@ -103,11 +100,6 @@ public class FpcUtil {
                 .build();
 
         tenants = getResourceVal(tenantsId);
-
-        ModelObjectId defaultTenantId = defaultTenantBuilder()
-                .build();
-
-        defaultTenant = getResourceVal(defaultTenantId);
 
         configure = ResourceId.builder()
                 .addBranchPointSchema("/", null)
@@ -170,9 +162,9 @@ public class FpcUtil {
         }
     }
 
-    public static ModelObjectId.Builder defaultTenantBuilder() {
+    public static ModelObjectId.Builder tenantBuilder(FpcIdentity fpcIdentity) {
         TenantKeys tenantKeys = new TenantKeys();
-        tenantKeys.tenantId(defaultIdentity);
+        tenantKeys.tenantId(fpcIdentity);
 
         return ModelObjectId.builder()
                 .addChild(DefaultTenants.class)
@@ -269,6 +261,93 @@ public class FpcUtil {
      */
     public static Short getTopicFromNode(String Key) {
         return nodeToTopicMap.get(Key);
+    }
+
+    /**
+     * Returns the root level node for Tenants.
+     * Tenants is an interface that includes a List of Tenant objects.
+     *
+     * @return Optional Tenants
+     */
+    public static Optional<DefaultTenants> getTenants() {
+        Filter filter = Filter.builder().build();
+        DataNode dataNode = dynamicConfigService.readNode(tenants, filter);
+
+        return getModelObjects(dataNode, null)
+                .stream()
+                .map(modelObject -> (DefaultTenants) modelObject)
+                .findFirst();
+    }
+
+    public static Optional<DefaultTenant> getTenant(FpcIdentity tenantId) {
+        Filter filter = Filter.builder().build();
+        DataNode dataNode = dynamicConfigService.readNode(getTenantResourceId(tenantId), filter);
+
+        return getModelObjects(dataNode, tenants)
+                .stream()
+                .map(modelObject -> (DefaultTenant) modelObject)
+                .findFirst();
+    }
+
+    /**
+     * Get Tenant by its Identifier.
+     *
+     * @param clientId Tenant Identifier
+     * @return Optional Tenant
+     */
+
+    public static Optional<DefaultTenant> getTenant(ClientIdentifier clientId) {
+        return Optional.empty();
+    }
+
+    /**
+     * Converts DataNode to a ModelObject.
+     *
+     * @param dataNode   DataNode
+     * @param resourceId Resource Identifier
+     * @return Model Object
+     */
+
+    public static List<ModelObject> getModelObjects(DataNode dataNode, ResourceId resourceId) {
+        ResourceData data = getResourceData(dataNode, resourceId);
+        ModelObjectData modelData = modelConverter.createModel(data);
+        return modelData.modelObjects();
+    }
+
+    /**
+     * Creates a Node inside the Dynamic Configuration Store.
+     *
+     * @param innerModelObject inner model object to create
+     * @param modelObjectId    Model Object ID
+     */
+    public static void createNode(InnerModelObject innerModelObject, ModelObjectId modelObjectId) {
+        ResourceData dataNode = modelConverter.createDataNode(
+                DefaultModelObjectData.builder()
+                        .identifier(modelObjectId)
+                        .addModelObject(innerModelObject)
+                        .build()
+        );
+        dataNode.dataNodes().forEach(
+                node -> dynamicConfigService.createNode(dataNode.resourceId(), node)
+        );
+    }
+
+    /**
+     * Updates a Node inside the Dynamic Configuration Store.
+     *
+     * @param innerModelObject inner model object to update
+     * @param modelObjectId    Model Object ID
+     */
+    public static void updateNode(InnerModelObject innerModelObject, ModelObjectId modelObjectId) {
+        ResourceData dataNode = modelConverter.createDataNode(
+                DefaultModelObjectData.builder()
+                        .identifier(modelObjectId)
+                        .addModelObject(innerModelObject)
+                        .build()
+        );
+        dataNode.dataNodes().forEach(
+                node -> dynamicConfigService.updateNode(dataNode.resourceId(), node)
+        );
     }
 
     /**
