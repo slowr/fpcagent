@@ -6,10 +6,7 @@
         "dpn-publisher-uri": "tcp://*:5555",
         "dpn-client-threads": 5,
         "node-id": "node0",
-        "network-id": "network1",
-        "zmq-broadcast-all": "1",
-        "zmq-broadcast-controllers": "2",
-        "zmq-broadcast-dpns": "3"
+        "network-id": "network1"
       }
     }
   }

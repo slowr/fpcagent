@@ -27,8 +27,7 @@ public interface DpnCommunicationService {
 
     /**
      * Creates Mobility Session.
-     *
-     * @param topic_id     - DPN Topic ID
+     *  @param topic_id     - DPN Topic ID
      * @param imsi         - IMSI identifier
      * @param default_ebi  - EBI
      * @param ue_ipv4      - UE IPv4 Address
@@ -39,7 +38,7 @@ public interface DpnCommunicationService {
      * @param op_id        - Operation Identifier
      */
     void create_session(
-            Short topic_id,
+            byte topic_id,
             BigInteger imsi,
             Short default_ebi,
             Ip4Address ue_ipv4,
@@ -52,8 +51,7 @@ public interface DpnCommunicationService {
 
     /**
      * Modifies Bearer.
-     *
-     * @param topic_id        - DPN Topic ID
+     *  @param topic_id        - DPN Topic ID
      * @param s1u_sgw_ipv4    - SGW IPv4 Address
      * @param s1u_enodeb_teid - ENodeB Tunnel Identifier
      * @param s1u_enodeb_ipv4 - ENodeB IPv4 Address
@@ -62,7 +60,7 @@ public interface DpnCommunicationService {
      * @param op_id           - Operation Identifier
      */
     void modify_bearer(
-            Short topic_id,
+            byte topic_id,
             Ip4Address s1u_sgw_ipv4,
             Long s1u_enodeb_teid,
             Ip4Address s1u_enodeb_ipv4,
@@ -73,14 +71,13 @@ public interface DpnCommunicationService {
 
     /**
      * Deletes Mobility Session.
-     *
-     * @param topic_id   - DPN Topic ID
+     *  @param topic_id   - DPN Topic ID
      * @param session_id - Context Identifier
      * @param client_id  - Client Identifier
      * @param op_id      - Operation Identifier
      */
     void delete_session(
-            Short topic_id,
+            byte topic_id,
             Long session_id,
             Long client_id,
             BigInteger op_id

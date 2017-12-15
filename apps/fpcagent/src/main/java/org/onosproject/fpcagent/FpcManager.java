@@ -16,10 +16,13 @@
 
 package org.onosproject.fpcagent;
 
+import com.google.common.collect.Sets;
 import org.apache.felix.scr.annotations.*;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
+import org.onosproject.fpcagent.providers.DpnProviderService;
+import org.onosproject.fpcagent.providers.DpnDeviceListener;
 import org.onosproject.fpcagent.util.ConfigHelper;
 import org.onosproject.fpcagent.workers.ZMQSBPublisherManager;
 import org.onosproject.fpcagent.workers.ZMQSBSubscriberManager;
@@ -30,6 +33,7 @@ import org.onosproject.yang.model.RpcRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.Optional;
 
 import static org.onosproject.fpcagent.util.FpcUtil.FPC_APP_ID;
@@ -68,9 +72,13 @@ public class FpcManager implements FpcService {
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private CoreService coreService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    private DpnProviderService dpnProviderService;
+
     /* Variables */
     private FpcConfig fpcConfig;
     private boolean started = false;
+    private HashSet<DpnDeviceListener> listeners = Sets.newHashSet();
 
     /* Config */
     private ConfigFactory<ApplicationId, FpcConfig> fpcConfigConfigFactory =
@@ -88,8 +96,7 @@ public class FpcManager implements FpcService {
         configService.addListener(configListener);
         registry.registerConfigFactory(fpcConfigConfigFactory);
 
-
-        log.info("FPC Agent Started");
+        log.info("FPC Service Started");
     }
 
     @Deactivate
@@ -100,9 +107,10 @@ public class FpcManager implements FpcService {
         if (started) {
             ZMQSBSubscriberManager.getInstance().close();
             ZMQSBPublisherManager.getInstance().close();
+            started = false;
         }
 
-        log.info("FPC Agent Stopped");
+        log.info("FPC Servicea Stopped");
     }
 
     /**
@@ -114,11 +122,9 @@ public class FpcManager implements FpcService {
                     started = true;
                     ZMQSBSubscriberManager.createInstance(
                             helper.dpnSubscriberUri(),
-                            helper.zmqBroadcastAll(),
-                            helper.zmqBroadcastControllers(),
-                            helper.zmqBroadcastDpns(),
                             helper.nodeId(),
-                            helper.networkId()
+                            helper.networkId(),
+                            dpnProviderService.getListener()
                     );
 
                     ZMQSBPublisherManager.createInstance(
@@ -130,6 +136,16 @@ public class FpcManager implements FpcService {
                     ZMQSBSubscriberManager.getInstance().open();
                 }
         );
+    }
+
+    @Override
+    public void addListener(DpnDeviceListener listener) {
+        listeners.add(listener);
+    }
+
+    @Override
+    public void removeListener(DpnDeviceListener listener) {
+        listeners.remove(listener);
     }
 
     @Override

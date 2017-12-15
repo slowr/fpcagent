@@ -1,70 +1,56 @@
 package org.onosproject.fpcagent.workers;
 
+import javafx.util.Pair;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.onosproject.fpcagent.providers.DpnDeviceListener;
 import org.onosproject.fpcagent.util.FpcUtil;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.yangautoprefixnotify.value.DownlinkDataNotification;
-import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 
-import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static org.onosproject.fpcagent.util.Converter.*;
+import static org.onosproject.fpcagent.protocols.DpnNgicCommunicator.*;
+import static org.onosproject.fpcagent.util.Converter.toInt;
 
 public class ZMQSBSubscriberManager implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(ZMQSBSubscriberManager.class);
     private static int MIN_TOPIC_VAL = 4;
     private static int MAX_TOPIC_VAL = 255;
-    private static byte ASSIGN_ID = 0b0000_1010;
-    private static byte ASSIGN_CONFLICT = 0b0000_1011;
-    private static byte HELLO_REPLY = 0b0000_1101;
-    private static byte CONTROLLER_STATUS_INDICATION = 0b0000_1110;
-    private static byte HELLO = 0b0000_0001;
-    private static byte GOODBYE = 0b0000_0010;
     private static ZMQSBSubscriberManager _instance = null;
-    private static Long controllerSourceId;
-    private static Short subscriberId;
     private final String address;
-    private final Short broadcastAllId;
-    private final Short broadcastControllersId;
-    private final Short broadcastDpnsId;
     private final String nodeId;
     private final String networkId;
+    private Long controllerSourceId;
+    private byte controllerTopic;
     private boolean run;
     private boolean conflictingTopic;
+
     private Future<?> broadcastAllWorker;
     private Future<?> broadcastControllersWorker;
     private Future<?> broadcastTopicWorker;
     private Future<?> generalWorker;
 
-    protected ZMQSBSubscriberManager(String address, String broadcastAllId, String broadcastControllersId,
-                                     String broadcastDpnsId, String nodeId, String networkId) {
+    private DpnDeviceListener dpnDeviceListener;
+
+    protected ZMQSBSubscriberManager(String address, String nodeId, String networkId, DpnDeviceListener dpnDeviceListener) {
         this.address = address;
         this.run = true;
-
         this.nodeId = nodeId;
         this.networkId = networkId;
-        this.broadcastAllId = Short.parseShort(broadcastAllId);
-        this.broadcastControllersId = Short.parseShort(broadcastControllersId);
-        this.broadcastDpnsId = Short.parseShort(broadcastDpnsId);
-
         this.conflictingTopic = false;
-        controllerSourceId = (long) ThreadLocalRandom.current().nextInt(0, 65535);
+        this.controllerSourceId = (long) ThreadLocalRandom.current().nextInt(0, 65535);
+        this.dpnDeviceListener = dpnDeviceListener;
     }
 
-    public static ZMQSBSubscriberManager createInstance(String address, String broadcastAllId,
-                                                        String broadcastControllersId, String broadcastDpnsId,
-                                                        String nodeId, String networkId) {
+    public static ZMQSBSubscriberManager createInstance(String address, String nodeId, String networkId, DpnDeviceListener providerService) {
         if (_instance == null) {
-            _instance = new ZMQSBSubscriberManager(address, broadcastAllId, broadcastControllersId,
-                    broadcastDpnsId, nodeId, networkId);
+            _instance = new ZMQSBSubscriberManager(address, nodeId, networkId, providerService);
         }
         return _instance;
     }
@@ -73,29 +59,28 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
         return _instance;
     }
 
-    public static Short getControllerTopic() {
-        return subscriberId;
+    public byte getControllerTopic() {
+        return controllerTopic;
     }
 
-    public static Long getControllerSourceId() {
+    public Long getControllerSourceId() {
         return controllerSourceId;
     }
 
     public void open() {
-        short subscriberId = (short) ThreadLocalRandom.current().nextInt(MIN_TOPIC_VAL, MAX_TOPIC_VAL + 1);
-
         broadcastAllWorker = Executors.newSingleThreadExecutor()
-                .submit(new ZMQSubscriberWorker(broadcastAllId));
+                .submit(new ZMQSubscriberWorker(ReservedTopics.BROADCAST_ALL.getType()));
 
         broadcastControllersWorker = Executors.newSingleThreadExecutor()
-                .submit(new ZMQSubscriberWorker(broadcastControllersId));
+                .submit(new ZMQSubscriberWorker(ReservedTopics.BROADCAST_CONTROLLERS.getType()));
 
         broadcastTopicWorker = Executors.newSingleThreadExecutor()
-                .submit(new BroadcastTopic(subscriberId));
+                .submit(new AssignTopic());
     }
 
     @Override
     public void close() {
+        send_goodbye_dpns(nodeId, networkId);
         run = false;
     }
 
@@ -105,30 +90,11 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
      * @param conflict - Flag to indicate conflict
      * @param subId    - Topic Id that caused the conflict
      */
-    protected void BroadcastAllSubIdCallBack(boolean conflict, Short subId) {
-        if (conflict && subscriberId.equals(subId)) {
+    protected void BroadcastAllSubIdCallBack(boolean conflict, byte subId) {
+        if (conflict && controllerTopic == subId) {
             this.conflictingTopic = true;
             broadcastTopicWorker.cancel(true);
         }
-    }
-
-    /**
-     * Broadcasts the GOODBYE message to all the DPNs
-     */
-    public void sendGoodbyeToDpns() {
-        ByteBuffer bb = ByteBuffer.allocate(10 + nodeId.length() + networkId.length());
-        bb.put(toUint8(broadcastDpnsId))
-                .put(CONTROLLER_STATUS_INDICATION)
-                .put(toUint8(subscriberId))
-                .put(GOODBYE)
-                .put(toUint32(controllerSourceId))
-                .put(toUint8((short) nodeId.length()))
-                .put(nodeId.getBytes())
-                .put(toUint8((short) networkId.length()))
-                .put(networkId.getBytes());
-
-        log.info("sendGoodbyeToDpns: {}", bb.array());
-        ZMQSBPublisherManager.getInstance().send(bb);
     }
 
     /**
@@ -143,81 +109,112 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
         String node_id = new String(Arrays.copyOfRange(contents, 8, 8 + nodeIdLen));
         String network_id = new String(Arrays.copyOfRange(contents, 9 + nodeIdLen, 9 + nodeIdLen + networkIdLen));
 
-        if (toUint8(subscriberId) == topic || (nodeId.equals(node_id) && networkId.equals(network_id))) {
-            ByteBuffer bb = ByteBuffer.allocate(9 + nodeId.length() + networkId.length());
-            bb.put(toUint8(broadcastAllId))
-                    .put(ASSIGN_CONFLICT)
-                    .put(topic)
-                    .put(toUint32(controllerSourceId))
-                    .put(toUint8((short) nodeId.length()))
-                    .put(nodeId.getBytes())
-                    .put(toUint8((short) networkId.length()))
-                    .put(networkId.getBytes());
-
-            log.info("SendAssignConflictMessage: {}", bb.array());
-            ZMQSBPublisherManager.getInstance().send(bb);
+        if (controllerTopic == topic || (nodeId.equals(node_id) && networkId.equals(network_id))) {
+            send_assign_conflict(nodeId, networkId);
         }
     }
 
     protected class ZMQSubscriberWorker implements Runnable {
-        private final Short subscriberId;
+        private final byte subscribedTopic;
         private ZContext ctx;
 
-        ZMQSubscriberWorker(Short subscriberId) {
-            this.subscriberId = subscriberId;
+        ZMQSubscriberWorker(byte subscribedTopic) {
+            this.subscribedTopic = subscribedTopic;
             this.ctx = new ZContext();
         }
 
-        /**
-         * Sends a reply to a DPN Hello
-         *
-         * @param dpnStatus - DPN Status Indication message received from the DPN
-         */
-        protected void sendHelloReply(FpcUtil.DPNStatusIndication dpnStatus) {
-            if (FpcUtil.getTopicFromNode(dpnStatus.getKey()) != null) {
-                ByteBuffer bb = ByteBuffer.allocate(9 + nodeId.length() + networkId.length())
-                        .put(toUint8(FpcUtil.getTopicFromNode(dpnStatus.getKey())))
-                        .put(HELLO_REPLY)
-                        .put(toUint8(ZMQSBSubscriberManager.getControllerTopic()))
-                        .put(toUint32(ZMQSBSubscriberManager.getControllerSourceId()))
-                        .put(toUint8((short) nodeId.length()))
-                        .put(nodeId.getBytes())
-                        .put(toUint8((short) networkId.length()))
-                        .put(networkId.getBytes());
+//        /**
+//         * Ensures the session id is an unsigned 64 bit integer
+//         *
+//         * @param sessionId - session id received from the DPN
+//         * @return unsigned session id
+//         */
+//        private static BigInteger checkSessionId(BigInteger sessionId) {
+//            if (sessionId.compareTo(BigInteger.ZERO) < 0) {
+//                sessionId = sessionId.add(BigInteger.ONE.shiftLeft(64));
+//            }
+//            return sessionId;
+//        }
+//
+//        /**
+//         * Decodes a DownlinkDataNotification
+//         *
+//         * @param buf - message buffer
+//         * @param key - Concatenation of node id + / + network id
+//         * @return DownlinkDataNotification or null if it could not be successfully decoded
+//         */
+//        private static DownlinkDataNotification processDDN(byte[] buf, String key) {
+//            DownlinkDataNotification ddnB = new DefaultDownlinkDataNotification();
+//            ddnB.sessionId(checkSessionId(toBigInt(buf, 2)));
+//            ddnB.notificationMessageType(DOWNLINK_DATA_NOTIFICATION_STRING);
+//            ddnB.clientId(ClientIdentifier.of(FpcIdentity.of(FpcIdentityUnion.of(fromIntToLong(buf, 10)))));
+//            ddnB.opId(OpIdentifier.of(BigInteger.valueOf(fromIntToLong(buf, 14))));
+//            ddnB.notificationDpnId(uplinkDpnMap.get(key));
+//            return ddnB;
+//        }
 
-                log.info("sendHelloReply: {}", bb.array());
-                ZMQSBPublisherManager.getInstance().send(bb);
+        public Pair<Object, Object> decode(byte[] buf) {
+            s11MsgType type;
+            type = s11MsgType.getEnum(buf[1]);
+            if (type.equals(s11MsgType.DDN)) {
+                short nodeIdLen = buf[18];
+                short networkIdLen = buf[19 + nodeIdLen];
+                String key = new String(Arrays.copyOfRange(buf, 19, 19 + nodeIdLen)) + "/" + new String(Arrays.copyOfRange(buf, 20 + nodeIdLen, 20 + nodeIdLen + networkIdLen));
+//                return uplinkDpnMap.get(key) == null ? null : new AbstractMap.SimpleEntry<>(uplinkDpnMap.get(key), processDDN(buf, key));
+            } else if (type.equals(s11MsgType.DPN_STATUS_INDICATION)) {
+                DpnStatusIndication status;
+
+                short nodeIdLen = buf[8];
+                short networkIdLen = buf[9 + nodeIdLen];
+                String deviceId = new String(Arrays.copyOfRange(buf, 9, 9 + nodeIdLen)) + "/" + new String(Arrays.copyOfRange(buf, 10 + nodeIdLen, 10 + nodeIdLen + networkIdLen));
+
+                status = DpnStatusIndication.getEnum(buf[3]);
+                if (status.equals(DpnStatusIndication.HELLO)) {
+                    log.info("Hello {} on topic {}", deviceId, buf[2]);
+
+                    dpnDeviceListener.deviceAdded(deviceId, buf[2]);
+                } else if (status.equals(DpnStatusIndication.GOODBYE)) {
+                    log.info("Bye {}", deviceId);
+                    dpnDeviceListener.deviceRemoved(deviceId);
+                }
+                return new Pair<>(status, deviceId);
             }
+            return null;
         }
 
         @Override
         public void run() {
             ZMQ.Socket subscriber = this.ctx.createSocket(ZMQ.SUB);
             subscriber.connect(address);
-            subscriber.subscribe(new byte[]{toUint8(subscriberId)});
-            log.debug("Subscriber at {} / {}", address, subscriberId);
+            subscriber.subscribe(new byte[]{subscribedTopic});
+            log.debug("Subscriber at {} / {}", address, subscribedTopic);
             while ((!Thread.currentThread().isInterrupted()) && run) {
                 byte[] contents = subscriber.recv();
                 byte topic = contents[0];
-                byte messageType = contents[1];
-                log.debug("Received {}", contents);
+                s11MsgType messageType = s11MsgType.getEnum(contents[1]);
+                log.info("Received {}", messageType);
                 switch (topic) {
                     case 1:
-                        if (messageType == ASSIGN_CONFLICT && toInt(contents, 3) != controllerSourceId) {
-                            BroadcastAllSubIdCallBack(true, (short) contents[2]);
-                        } else if (messageType == ASSIGN_ID && toInt(contents, 3) != controllerSourceId) {
+                        if (messageType.equals(s11MsgType.ASSIGN_CONFLICT) &&
+                                toInt(contents, 3) != controllerSourceId) {
+                            BroadcastAllSubIdCallBack(true, contents[2]);
+                        } else if (messageType.equals(s11MsgType.ASSIGN_TOPIC) &&
+                                toInt(contents, 3) != controllerSourceId) {
                             SendAssignConflictMessage(contents);
                         }
                         break;
                     default:
-                        Map.Entry<FpcDpnId, Object> entry = FpcUtil.decode(contents);
-                        if (entry != null) {
-                            if (entry.getValue() instanceof DownlinkDataNotification) {
+                        Pair msg = decode(contents);
+                        if (msg != null) {
+                            Object key = msg.getKey();
+                            if (key instanceof DownlinkDataNotification) {
                                 // TODO handle DL notification
-                            } else if (entry.getValue() instanceof FpcUtil.DPNStatusIndication) {
-                                FpcUtil.DPNStatusIndication dpnStatus = (FpcUtil.DPNStatusIndication) entry.getValue();
-                                if (dpnStatus.getStatus() == FpcUtil.DPNStatusIndication.Status.HELLO) {
-                                    sendHelloReply(dpnStatus);
+                            } else if (key instanceof DpnStatusIndication) {
+                                if (key.equals(DpnStatusIndication.HELLO)) {
+                                    byte dpnTopic = FpcUtil.getTopicFromNode(msg.getValue().toString());
+                                    if (dpnTopic != -1) {
+                                        send_status_ack(nodeId, networkId, dpnTopic);
+                                    }
                                 }
                             }
                         }
@@ -237,75 +234,31 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
     /**
      * Class to broadcast a topic for the controller
      */
-    protected class BroadcastTopic implements Runnable {
-        private Short topic;
+    protected class AssignTopic implements Runnable {
+        private byte topic;
 
-        /**
-         * Constructor
-         *
-         * @param topic - Topic to broadcast
-         */
-        public BroadcastTopic(Short topic) {
-            this.topic = topic;
-        }
-
-        /**
-         * Broadcasts the topic
-         */
-        private void broadcastTopic() {
-            ByteBuffer bb = ByteBuffer.allocate(9 + nodeId.length() + networkId.length());
-            bb.put(toUint8(broadcastAllId))
-                    .put(ASSIGN_ID)
-                    .put(toUint8(this.topic))
-                    .put(toUint32(controllerSourceId))
-                    .put(toUint8((short) nodeId.length()))
-                    .put(nodeId.getBytes())
-                    .put(toUint8((short) networkId.length()))
-                    .put(networkId.getBytes());
-
-            log.info("broadcastTopic: {}", bb.array());
-            ZMQSBPublisherManager.getInstance().send(bb);
-        }
-
-        /**
-         * Broadcasts the HELLO message to all the DPNs
-         */
-        private void sendHelloToDpns() {
-            ByteBuffer bb = ByteBuffer.allocate(10 + nodeId.length() + networkId.length());
-            bb.put(toUint8(broadcastDpnsId))
-                    .put(CONTROLLER_STATUS_INDICATION)
-                    .put(toUint8(subscriberId))
-                    .put(HELLO)
-                    .put(toUint32(controllerSourceId))
-                    .put(toUint8((short) nodeId.length()))
-                    .put(nodeId.getBytes())
-                    .put(toUint8((short) networkId.length()))
-                    .put(networkId.getBytes());
-
-
-            log.info("sendHelloToDpns: {}", bb.array());
-            ZMQSBPublisherManager.getInstance().send(bb);
+        public AssignTopic() {
+            this.topic = (byte) ThreadLocalRandom.current().nextInt(MIN_TOPIC_VAL, MAX_TOPIC_VAL + 1);
         }
 
         @Override
         public void run() {
             try {
-                this.broadcastTopic();
+                send_assign_topic(nodeId, networkId, this.topic);
                 log.debug("Thread sleeping: " + Thread.currentThread().getName());
-                Thread.sleep(2000);
+                Thread.sleep(2000); // wait 10 sec before assigning topic
             } catch (InterruptedException e) {
                 if (conflictingTopic) {
                     conflictingTopic = false;
-                    this.topic = (short) ThreadLocalRandom.current().nextInt(MIN_TOPIC_VAL, MAX_TOPIC_VAL + 1);
-                    subscriberId = this.topic;
+                    this.topic = (byte) ThreadLocalRandom.current().nextInt(MIN_TOPIC_VAL, MAX_TOPIC_VAL + 1);
+                    controllerTopic = this.topic;
                     this.run();
                     return;
                 } else {
                     log.error(ExceptionUtils.getFullStackTrace(e));
                 }
             }
-            subscriberId = this.topic;
-            log.info("Topic Id: " + this.topic);
+            controllerTopic = this.topic;
             generalWorker = Executors.newSingleThreadExecutor().submit(new ZMQSubscriberWorker(this.topic));
 
             try {
@@ -313,7 +266,8 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
             } catch (InterruptedException e) {
                 log.error(ExceptionUtils.getFullStackTrace(e));
             }
-            sendHelloToDpns();
+
+            send_hello_dpns(nodeId, networkId);
         }
 
     }

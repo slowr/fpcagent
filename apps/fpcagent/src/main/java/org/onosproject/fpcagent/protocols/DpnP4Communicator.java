@@ -23,17 +23,17 @@ import java.math.BigInteger;
 
 public class DpnP4Communicator extends P4DpnControlProtocol implements DpnCommunicationService {
     @Override
-    public void create_session(Short topic_id, BigInteger imsi, Short default_ebi, Ip4Address ue_ipv4, Long s1u_sgw_teid, Ip4Address s1u_sgw_ipv4, Long session_id, Long client_id, BigInteger op_id) {
+    public void create_session(byte topic_id, BigInteger imsi, Short default_ebi, Ip4Address ue_ipv4, Long s1u_sgw_teid, Ip4Address s1u_sgw_ipv4, Long session_id, Long client_id, BigInteger op_id) {
 
     }
 
     @Override
-    public void modify_bearer(Short topic_id, Ip4Address s1u_sgw_ipv4, Long s1u_enodeb_teid, Ip4Address s1u_enodeb_ipv4, Long session_id, Long client_id, BigInteger op_id) {
+    public void modify_bearer(byte topic_id, Ip4Address s1u_sgw_ipv4, Long s1u_enodeb_teid, Ip4Address s1u_enodeb_ipv4, Long session_id, Long client_id, BigInteger op_id) {
 
     }
 
     @Override
-    public void delete_session(Short topic_id, Long session_id, Long client_id, BigInteger op_id) {
+    public void delete_session(byte topic_id, Long session_id, Long client_id, BigInteger op_id) {
 
     }
 
