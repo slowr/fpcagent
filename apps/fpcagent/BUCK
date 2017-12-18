@@ -2,15 +2,14 @@ COMPILE_DEPS = [
     '//lib:CORE_DEPS',
     '//lib:JACKSON',
     '//lib:KRYO',
-    '//models/fpcagent:onos-models-fpcagent',
-    '//models/common:onos-models-common',
     '//lib:onos-yang-model',
-    '//apps/config:onos-apps-config',
-    '//core/api:onos-api',
-    '//lib:javax.ws.rs-api',
-    '//utils/rest:onlab-rest',
+    '//lib:httpclient-osgi',
+    '//lib:httpcore-osgi',
     '//core/store/serializers:onos-core-serializers',
     '//apps/restconf/utils:onos-apps-restconf-utils',
+    '//apps/config:onos-apps-config',
+    '//models/fpcagent:onos-models-fpcagent',
+    '//models/common:onos-models-common',
     ':zeromq',
     ':json',
 ]
@@ -23,6 +22,8 @@ TEST_DEPS = [
 
 BUNDLES = [
     '//apps/fpcagent:onos-apps-fpcagent',
+    '//lib:httpclient-osgi',
+    '//lib:httpcore-osgi',
 ]
 
 EXCLUDED_BUNDLES = [
@@ -51,6 +52,7 @@ onos_app(
     url = 'http://onosproject.org',
     description = 'FPC Agent YANG Application',
     required_apps = APPS,
+    included_bundles = BUNDLES,
     excluded_bundles = EXCLUDED_BUNDLES,
 )
 

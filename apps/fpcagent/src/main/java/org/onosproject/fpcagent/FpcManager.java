@@ -18,12 +18,16 @@ package org.onosproject.fpcagent;
 
 import com.google.common.collect.Sets;
 import org.apache.felix.scr.annotations.*;
+import org.onosproject.config.DynamicConfigEvent;
+import org.onosproject.config.DynamicConfigListener;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.fpcagent.providers.DpnProviderService;
+import org.onosproject.core.IdGenerator;
 import org.onosproject.fpcagent.providers.DpnDeviceListener;
+import org.onosproject.fpcagent.providers.DpnProviderService;
 import org.onosproject.fpcagent.util.ConfigHelper;
+import org.onosproject.fpcagent.workers.HTTPNotifier;
 import org.onosproject.fpcagent.workers.ZMQSBPublisherManager;
 import org.onosproject.fpcagent.workers.ZMQSBSubscriberManager;
 import org.onosproject.net.config.*;
@@ -36,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashSet;
 import java.util.Optional;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.fpcagent.util.FpcUtil.FPC_APP_ID;
 
 /**
@@ -49,6 +54,9 @@ public class FpcManager implements FpcService {
     private static final Class<FpcConfig> CONFIG_CLASS = FpcConfig.class;
     private final InternalNetworkConfigListener configListener =
             new InternalNetworkConfigListener();
+
+    private final InternalConfigListener dynListener =
+            new InternalConfigListener();
 
     /* Services */
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
@@ -76,6 +84,7 @@ public class FpcManager implements FpcService {
     private DpnProviderService dpnProviderService;
 
     /* Variables */
+    private IdGenerator notificationIds;
     private FpcConfig fpcConfig;
     private boolean started = false;
     private HashSet<DpnDeviceListener> listeners = Sets.newHashSet();
@@ -95,6 +104,11 @@ public class FpcManager implements FpcService {
         coreService.registerApplication(FPC_APP_ID);
         configService.addListener(configListener);
         registry.registerConfigFactory(fpcConfigConfigFactory);
+        dynamicConfigService.addListener(dynListener);
+
+        notificationIds = coreService.getIdGenerator("fpc-notification-ids");
+
+        HTTPNotifier.getInstance().open();
 
         log.info("FPC Service Started");
     }
@@ -102,6 +116,7 @@ public class FpcManager implements FpcService {
     @Deactivate
     protected void deactivate() {
         configService.removeListener(configListener);
+        dynamicConfigService.removeListener(dynListener);
         registry.unregisterConfigFactory(fpcConfigConfigFactory);
 
         if (started) {
@@ -110,7 +125,9 @@ public class FpcManager implements FpcService {
             started = false;
         }
 
-        log.info("FPC Servicea Stopped");
+        HTTPNotifier.getInstance().close();
+
+        log.info("FPC Service Stopped");
     }
 
     /**
@@ -183,5 +200,17 @@ public class FpcManager implements FpcService {
             }
         }
 
+    }
+
+    /**
+     * Representation of internal listener, listening for dynamic config event.
+     */
+    private class InternalConfigListener implements DynamicConfigListener {
+
+        @Override
+        public void event(DynamicConfigEvent event) {
+            checkNotNull(event, "Event cannot be NULL");
+            log.debug("event {}", event);
+        }
     }
 }

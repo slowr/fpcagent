@@ -160,6 +160,7 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
                 short nodeIdLen = buf[18];
                 short networkIdLen = buf[19 + nodeIdLen];
                 String key = new String(Arrays.copyOfRange(buf, 19, 19 + nodeIdLen)) + "/" + new String(Arrays.copyOfRange(buf, 20 + nodeIdLen, 20 + nodeIdLen + networkIdLen));
+
 //                return uplinkDpnMap.get(key) == null ? null : new AbstractMap.SimpleEntry<>(uplinkDpnMap.get(key), processDDN(buf, key));
             } else if (type.equals(s11MsgType.DPN_STATUS_INDICATION)) {
                 DpnStatusIndication status;
@@ -171,7 +172,6 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
                 status = DpnStatusIndication.getEnum(buf[3]);
                 if (status.equals(DpnStatusIndication.HELLO)) {
                     log.info("Hello {} on topic {}", deviceId, buf[2]);
-
                     dpnDeviceListener.deviceAdded(deviceId, buf[2]);
                 } else if (status.equals(DpnStatusIndication.GOODBYE)) {
                     log.info("Bye {}", deviceId);

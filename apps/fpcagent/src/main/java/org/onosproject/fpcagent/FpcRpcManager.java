@@ -16,7 +16,11 @@
 
 package org.onosproject.fpcagent;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.felix.scr.annotations.*;
@@ -24,12 +28,20 @@ import org.onlab.packet.Ip4Address;
 import org.onlab.packet.Ip4Prefix;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.config.DynamicConfigStore;
+import org.onosproject.core.CoreService;
+import org.onosproject.core.IdGenerator;
 import org.onosproject.fpcagent.protocols.DpnCommunicationService;
 import org.onosproject.fpcagent.protocols.DpnNgicCommunicator;
 import org.onosproject.fpcagent.protocols.DpnP4Communicator;
+import org.onosproject.fpcagent.providers.CpProviderService;
 import org.onosproject.fpcagent.util.CacheManager;
 import org.onosproject.fpcagent.util.FpcUtil;
+import org.onosproject.fpcagent.workers.HTTPNotifier;
+import org.onosproject.net.device.DeviceEvent;
+import org.onosproject.net.device.DeviceListener;
+import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.device.DeviceStore;
+import org.onosproject.restconf.utils.RestconfUtils;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.DefaultConnectionInfo;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.P4DpnControlProtocol;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.ZmqDpnControlProtocol;
@@ -48,6 +60,7 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.c
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configurebundles.configurebundlesoutput.DefaultBundles;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configuredpn.DefaultConfigureDpnInput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.configuredpn.DefaultConfigureDpnOutput;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.dpnstatusvalue.DpnStatusEnum;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.instructions.Instructions;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.instructions.instructions.instrtype.Instr3GppMob;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.opinput.opbody.CreateOrUpdate;
@@ -66,6 +79,7 @@ import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.t
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.ContextsKeys;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.DefaultContexts;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpctopology.DefaultDpns;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.yangautoprefixnotify.value.DefaultDpnAvailability;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcContextId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnControlProtocol;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnId;
@@ -81,13 +95,13 @@ import org.slf4j.LoggerFactory;
 import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.*;
 
 import static org.onosproject.fpcagent.util.Converter.convertContext;
 import static org.onosproject.fpcagent.util.FpcUtil.*;
+
+//import org.onosproject.fpcagent.workers.HTTPNotifier;
 
 @Component(immediate = true)
 @Service
@@ -105,29 +119,49 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
     private DynamicConfigStore dynamicConfigStore;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
-    private RpcRegistry registry;
+    private RpcRegistry rpcRegistry;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
     private DeviceStore deviceStore;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    private CpProviderService cpProviderService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    private CoreService coreService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY_UNARY)
+    private DeviceService deviceService;
+
+    private InternalDeviceListener listener = new InternalDeviceListener();
     private ConcurrentMap<ClientIdentifier, DefaultRegisterClientInput> clientInfo = Maps.newConcurrentMap();
+    private ConcurrentMap<FpcIdentity, HashSet<ClientIdentifier>> tenantInfo = Maps.newConcurrentMap();
+    private HashMap<FpcDpnId, org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpctopology.Dpns> dpnInfo = Maps.newHashMap();
+
     // FIXME configurable
     private ExecutorService executorService = Executors.newFixedThreadPool(25);
+    private IdGenerator notificationIds;
 
     @Activate
     protected void activate() {
         init();
-        registry.registerRpcService(this);
+        rpcRegistry.registerRpcService(this);
+        deviceService.addListener(listener);
         log.info("FPC RPC Service Started");
     }
 
     @Deactivate
     protected void deactivate() {
-        registry.unregisterRpcService(this);
+        deviceService.removeListener(listener);
+        rpcRegistry.unregisterRpcService(this);
+        clientInfo.clear();
+        tenantInfo.clear();
+        dpnInfo.clear();
         log.info("FPC RPC Service Stopped");
     }
 
     private void init() {
+        notificationIds = coreService.getIdGenerator("fpc-notification-ids");
         FpcUtil.modelConverter = modelConverter;
         FpcUtil.dynamicConfigService = dynamicConfigService;
         FpcUtil.deviceStore = deviceStore;
@@ -176,7 +210,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
             defaultCommonSuccess.addToContexts(context);
 
             // check if mobility exists and if the context id exists.
-            if (CacheManager.getInstance(tenantId).contextsCache.get(context.contextId()).isPresent()) {
+            if (cacheManager.contextsCache.get(context.contextId()).isPresent()) {
                 // throw exception if trying to create a Context that already exists.
                 throw new RuntimeException("Context tried to create already exists. Please issue update operation..");
             }
@@ -871,6 +905,9 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                         throw new RuntimeException("Client already registered.");
                     }
                     clientInfo.put(input.clientId(), input);
+                    HashSet<ClientIdentifier> hashSet = tenantInfo.getOrDefault(input.tenantId(), Sets.newHashSet());
+                    hashSet.add(input.clientId());
+                    tenantInfo.put(input.tenantId(), hashSet);
                     registerClientOutput.clientId(input.clientId());
                     registerClientOutput.supportedFeatures(input.supportedFeatures());
                     registerClientOutput.endpointUri(input.endpointUri());
@@ -879,6 +916,12 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
 
                     DefaultConnections defaultConnections = new DefaultConnections();
                     defaultConnections.clientId(input.clientId().toString());
+                    // TODO add all fields
+
+                    cpProviderService.getListener().deviceAdded(
+                            input.clientId().toString(),
+                            input.endpointUri().toString()
+                    );
 
                     ModelObjectId modelObjectId = ModelObjectId.builder()
                             .addChild(DefaultConnectionInfo.class)
@@ -917,6 +960,8 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                     clientInfo.remove(input.clientId());
                     deregisterClientOutput.clientId(input.clientId());
 
+                    cpProviderService.getListener().deviceRemoved(input.clientId().toString());
+
                     DefaultConnections defaultConnections = new DefaultConnections();
                     defaultConnections.clientId(input.clientId().toString());
 
@@ -946,4 +991,112 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
         }, executorService).join();
     }
 
+    private void sendNotification(DefaultYangAutoPrefixNotify notify, ClientIdentifier client) {
+        ResourceData dataNode = modelConverter.createDataNode(
+                DefaultModelObjectData.builder()
+                        .addModelObject(notify)
+                        .build()
+        );
+        ObjectNode jsonNodes = RestconfUtils.convertDataNodeToJson(notification, dataNode.dataNodes().get(0));
+        ObjectMapper mapper = new ObjectMapper();
+
+        try {
+            log.info("Sending HTTP notification {} to {}", notify, client);
+            HTTPNotifier.getInstance().send(
+                    new AbstractMap.SimpleEntry<>(
+                            clientInfo.get(client).endpointUri().toString(),
+                            mapper.writeValueAsString(jsonNodes)
+                    )
+            );
+        } catch (JsonProcessingException e) {
+            log.error(ExceptionUtils.getFullStackTrace(e));
+        }
+    }
+
+    public class InternalDeviceListener implements DeviceListener {
+
+        @Override
+        public void event(DeviceEvent event) {
+            if (event.subject().manufacturer().equals("fpc")) {
+                switch (event.type()) {
+                    case DEVICE_UPDATED:
+                    case DEVICE_ADDED: {
+                        tenantInfo.forEach(
+                                (tenantId, clients) -> {
+                                    Optional<DefaultTenant> defaultTenant = getTenant(tenantId);
+                                    if (defaultTenant.isPresent()) {
+                                        DefaultTenant tenant = defaultTenant.get();
+                                        if (tenant.fpcTopology().dpns() != null) {
+                                            tenant.fpcTopology().dpns().forEach(dpn -> {
+                                                        if (!dpnInfo.containsKey(dpn.dpnId())) {
+                                                            DefaultYangAutoPrefixNotify notify = new DefaultYangAutoPrefixNotify();
+                                                            notify.notificationId(NotificationId.of(notificationIds.getNewId()));
+
+                                                            notify.timestamp(BigInteger.valueOf(System.currentTimeMillis()));
+                                                            DefaultDpnAvailability availability = new DefaultDpnAvailability();
+                                                            availability.availabilityMessageType("Dpn-Availability");
+                                                            availability.dpnId(dpn.dpnId());
+                                                            availability.dpnGroups(dpn.dpnGroups());
+                                                            availability.controlProtocol(dpn.controlProtocol());
+                                                            availability.networkId(dpn.networkId());
+                                                            availability.nodeId(dpn.nodeId());
+                                                            availability.dpnName(dpn.dpnName());
+                                                            availability.dpnStatus(DpnStatusEnum.AVAILABLE);
+
+                                                            notify.value(availability);
+
+                                                            clients.forEach(client -> sendNotification(notify, client));
+                                                            dpnInfo.put(dpn.dpnId(), dpn);
+                                                        }
+                                                    }
+                                            );
+                                        }
+                                    }
+                                }
+                        );
+                        break;
+                    }
+                    case DEVICE_AVAILABILITY_CHANGED:
+                    case DEVICE_REMOVED: {
+                        String[] s = event.subject().id().toString().split(":")[1].split("/");
+                        tenantInfo.forEach(
+                                (tenantId, clients) -> {
+                                    Optional<DefaultTenant> defaultTenant = getTenant(tenantId);
+                                    if (defaultTenant.isPresent()) {
+                                        DefaultTenant tenant = defaultTenant.get();
+                                        if (tenant.fpcTopology().dpns() != null) {
+                                            tenant.fpcTopology().dpns().forEach(dpn -> {
+                                                        if (dpn.networkId().equals(s[1]) && dpn.nodeId().equals(s[0]) &&
+                                                                dpnInfo.containsKey(dpn.dpnId())) {
+                                                            DefaultYangAutoPrefixNotify notify = new DefaultYangAutoPrefixNotify();
+                                                            notify.notificationId(NotificationId.of(notificationIds.getNewId()));
+
+                                                            notify.timestamp(BigInteger.valueOf(System.currentTimeMillis()));
+                                                            DefaultDpnAvailability availability = new DefaultDpnAvailability();
+                                                            availability.availabilityMessageType("Dpn-Availability");
+                                                            availability.dpnId(dpn.dpnId());
+                                                            availability.dpnGroups(dpn.dpnGroups());
+                                                            availability.controlProtocol(dpn.controlProtocol());
+                                                            availability.networkId(dpn.networkId());
+                                                            availability.nodeId(dpn.nodeId());
+                                                            availability.dpnName(dpn.dpnName());
+                                                            availability.dpnStatus(DpnStatusEnum.UNAVAILABLE);
+
+                                                            notify.value(availability);
+
+                                                            clients.forEach(client -> sendNotification(notify, client));
+                                                            dpnInfo.remove(dpn.dpnId());
+                                                        }
+                                                    }
+                                            );
+                                        }
+                                    }
+                                }
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }

@@ -51,8 +51,9 @@ public class FpcUtil {
     public static ResourceId tenants;
     public static ResourceId configureBundles;
     public static ResourceId registerClient;
-    public static ResourceId deregisterClinet;
+    public static ResourceId deregisterClient;
     public static ResourceId module;
+    public static ResourceId notification;
 
     /**
      * Returns resource id from model converter.
@@ -88,12 +89,12 @@ public class FpcUtil {
 
         configureDpn = ResourceId.builder()
                 .addBranchPointSchema("/", null)
-                .addBranchPointSchema("Configure-dpn", "urn:ietf:params:xml:ns:yang:fpcagent")
+                .addBranchPointSchema("configure-dpn", "urn:ietf:params:xml:ns:yang:fpcagent")
                 .build();
 
         configureBundles = ResourceId.builder()
                 .addBranchPointSchema("/", null)
-                .addBranchPointSchema("Configure-bundles", "urn:ietf:params:xml:ns:yang:fpcagent")
+                .addBranchPointSchema("configure-bundles", "urn:ietf:params:xml:ns:yang:fpcagent")
                 .build();
 
         registerClient = ResourceId.builder()
@@ -101,9 +102,14 @@ public class FpcUtil {
                 .addBranchPointSchema("register-client", "urn:onos:params:xml:ns:yang:fpc")
                 .build();
 
-        deregisterClinet = ResourceId.builder()
+        deregisterClient = ResourceId.builder()
                 .addBranchPointSchema("/", null)
                 .addBranchPointSchema("deregister-client", "urn:onos:params:xml:ns:yang:fpc")
+                .build();
+
+        notification = ResourceId.builder()
+                .addBranchPointSchema("/", null)
+                .addBranchPointSchema("notify", "urn:onos:params:xml:ns:yang:fpcagent")
                 .build();
     }
 
@@ -171,7 +177,7 @@ public class FpcUtil {
      * Gets the mapping for node id / network id to ZMQ Topic
      *
      * @param key - Concatenation of node id + / + network id
-     * @return - ZMQ Topic
+     * @return ZMQ Topic
      */
     public static byte getTopicFromNode(String key) {
         // TODO add cache
