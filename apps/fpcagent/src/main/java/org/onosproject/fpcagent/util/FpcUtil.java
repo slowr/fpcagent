@@ -109,7 +109,7 @@ public class FpcUtil {
 
         notification = ResourceId.builder()
                 .addBranchPointSchema("/", null)
-                .addBranchPointSchema("notify", "urn:onos:params:xml:ns:yang:fpcagent")
+                .addBranchPointSchema("notify", "urn:ietf:params:xml:ns:yang:fpcagent")
                 .build();
     }
 

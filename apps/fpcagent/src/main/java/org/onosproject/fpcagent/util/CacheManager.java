@@ -20,9 +20,11 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Maps;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.DefaultTenant;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpcmobility.DefaultContexts;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpctopology.DefaultDpns;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpctopology.Dpns;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcContextId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcIdentity;
@@ -44,6 +46,7 @@ public class CacheManager {
     private final Logger log = LoggerFactory.getLogger(getClass());
     public LoadingCache<FpcContextId, Optional<DefaultContexts>> contextsCache;
     public LoadingCache<FpcDpnId, Optional<DefaultDpns>> dpnsCache;
+    public LoadingCache<String, Optional<FpcDpnId>> nodeNetworkCache;
 
     private CacheManager(FpcIdentity identity) {
         contextsCache = CacheBuilder.newBuilder()
@@ -96,6 +99,32 @@ public class CacheManager {
                                     // let store to populate and retry
                                     Thread.sleep(1000);
                                     return load(fpcDpnId);
+                                }
+                                return Optional.empty();
+                            }
+                        }
+                );
+
+        nodeNetworkCache = CacheBuilder.newBuilder()
+                .maximumSize(100)
+                .build(
+                        new CacheLoader<String, Optional<FpcDpnId>>() {
+                            @Override
+                            public Optional<FpcDpnId> load(String s) throws Exception {
+                                try {
+                                    Optional<DefaultTenant> defaultTenant = getTenant(identity);
+                                    if (defaultTenant.isPresent()) {
+                                        DefaultTenant tenant = defaultTenant.get();
+                                        log.debug("tenant {}", tenant);
+                                        if (tenant.fpcTopology().dpns() != null) {
+                                            return tenant.fpcTopology().dpns().stream()
+                                                    .filter(dpns -> s.equals(dpns.nodeId()+"/"+dpns.networkId()))
+                                                    .findFirst()
+                                                    .map(Dpns::dpnId);
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    log.error(ExceptionUtils.getFullStackTrace(e));
                                 }
                                 return Optional.empty();
                             }

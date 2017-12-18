@@ -136,7 +136,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
     private InternalDeviceListener listener = new InternalDeviceListener();
     private ConcurrentMap<ClientIdentifier, DefaultRegisterClientInput> clientInfo = Maps.newConcurrentMap();
     private ConcurrentMap<FpcIdentity, HashSet<ClientIdentifier>> tenantInfo = Maps.newConcurrentMap();
-    private HashMap<FpcDpnId, org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.tenant.fpctopology.Dpns> dpnInfo = Maps.newHashMap();
+    private HashSet<FpcDpnId> dpnInfo = Sets.newHashSet();
 
     // FIXME configurable
     private ExecutorService executorService = Executors.newFixedThreadPool(25);
@@ -734,7 +734,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                             .addModelObject(configureDpnOutput)
                             .build()
             );
-            log.info("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
+            log.debug("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
             return new RpcOutput(status, dataNode.dataNodes().get(0));
         }, executorService).join();
     }
@@ -793,7 +793,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                             .addModelObject(configureOutput)
                             .build()
             );
-            log.info("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
+            log.debug("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
             return new RpcOutput(status, dataNode.dataNodes().get(0));
         }, executorService).join();
     }
@@ -854,7 +854,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                             .addModelObject(configureBundlesOutput)
                             .build()
             );
-            log.info("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
+            log.debug("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
             return new RpcOutput(status, dataNode.dataNodes().get(0));
         }, executorService).join();
     }
@@ -866,7 +866,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
             // TODO implement
             return null;
         }, executorService);
-        log.info("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
+        log.debug("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
         return null;
     }
 
@@ -877,7 +877,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
             // TODO implement
             return null;
         }, executorService);
-        log.info("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
+        log.debug("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
         return null;
     }
 
@@ -888,7 +888,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
             // TODO implement
             return null;
         }, executorService);
-        log.info("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
+        log.debug("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
         return null;
     }
 
@@ -939,7 +939,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                             .addModelObject(registerClientOutput)
                             .build()
             );
-            log.info("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
+            log.debug("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
             return new RpcOutput(status, dataNode.dataNodes().get(0));
         }).join();
     }
@@ -986,7 +986,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                             .addModelObject(deregisterClientOutput)
                             .build()
             );
-            log.info("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
+            log.debug("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
             return new RpcOutput(status, dataNode.dataNodes().get(0));
         }, executorService).join();
     }
@@ -1028,7 +1028,11 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                                         DefaultTenant tenant = defaultTenant.get();
                                         if (tenant.fpcTopology().dpns() != null) {
                                             tenant.fpcTopology().dpns().forEach(dpn -> {
-                                                        if (!dpnInfo.containsKey(dpn.dpnId())) {
+                                                        CacheManager.getInstance(tenantId).nodeNetworkCache.put(
+                                                                dpn.nodeId() + "/" + dpn.networkId(),
+                                                                Optional.of(dpn.dpnId())
+                                                        );
+                                                        if (!dpnInfo.contains(dpn.dpnId())) {
                                                             DefaultYangAutoPrefixNotify notify = new DefaultYangAutoPrefixNotify();
                                                             notify.notificationId(NotificationId.of(notificationIds.getNewId()));
 
@@ -1046,7 +1050,7 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                                                             notify.value(availability);
 
                                                             clients.forEach(client -> sendNotification(notify, client));
-                                                            dpnInfo.put(dpn.dpnId(), dpn);
+                                                            dpnInfo.add(dpn.dpnId());
                                                         }
                                                     }
                                             );
@@ -1058,38 +1062,37 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
                     }
                     case DEVICE_AVAILABILITY_CHANGED:
                     case DEVICE_REMOVED: {
-                        String[] s = event.subject().id().toString().split(":")[1].split("/");
+                        String nodeNetwork = event.subject().id().toString().split(":")[1];
                         tenantInfo.forEach(
                                 (tenantId, clients) -> {
-                                    Optional<DefaultTenant> defaultTenant = getTenant(tenantId);
-                                    if (defaultTenant.isPresent()) {
-                                        DefaultTenant tenant = defaultTenant.get();
-                                        if (tenant.fpcTopology().dpns() != null) {
-                                            tenant.fpcTopology().dpns().forEach(dpn -> {
-                                                        if (dpn.networkId().equals(s[1]) && dpn.nodeId().equals(s[0]) &&
-                                                                dpnInfo.containsKey(dpn.dpnId())) {
-                                                            DefaultYangAutoPrefixNotify notify = new DefaultYangAutoPrefixNotify();
-                                                            notify.notificationId(NotificationId.of(notificationIds.getNewId()));
+                                    try {
+                                        FpcDpnId fpcDpnId = CacheManager.getInstance(tenantId).nodeNetworkCache.get(nodeNetwork).get();
 
-                                                            notify.timestamp(BigInteger.valueOf(System.currentTimeMillis()));
-                                                            DefaultDpnAvailability availability = new DefaultDpnAvailability();
-                                                            availability.availabilityMessageType("Dpn-Availability");
-                                                            availability.dpnId(dpn.dpnId());
-                                                            availability.dpnGroups(dpn.dpnGroups());
-                                                            availability.controlProtocol(dpn.controlProtocol());
-                                                            availability.networkId(dpn.networkId());
-                                                            availability.nodeId(dpn.nodeId());
-                                                            availability.dpnName(dpn.dpnName());
-                                                            availability.dpnStatus(DpnStatusEnum.UNAVAILABLE);
+                                        if (dpnInfo.contains(fpcDpnId)) {
+                                            DefaultDpns dpn = CacheManager.getInstance(tenantId).dpnsCache.get(fpcDpnId).get();
 
-                                                            notify.value(availability);
+                                            DefaultYangAutoPrefixNotify notify = new DefaultYangAutoPrefixNotify();
+                                            notify.notificationId(NotificationId.of(notificationIds.getNewId()));
 
-                                                            clients.forEach(client -> sendNotification(notify, client));
-                                                            dpnInfo.remove(dpn.dpnId());
-                                                        }
-                                                    }
-                                            );
+                                            notify.timestamp(BigInteger.valueOf(System.currentTimeMillis()));
+                                            DefaultDpnAvailability availability = new DefaultDpnAvailability();
+                                            availability.availabilityMessageType("Dpn-Availability");
+                                            availability.dpnId(dpn.dpnId());
+                                            availability.dpnGroups(dpn.dpnGroups());
+                                            availability.controlProtocol(dpn.controlProtocol());
+                                            availability.networkId(dpn.networkId());
+                                            availability.nodeId(dpn.nodeId());
+                                            availability.dpnName(dpn.dpnName());
+                                            availability.dpnStatus(DpnStatusEnum.UNAVAILABLE);
+
+                                            notify.value(availability);
+
+                                            clients.forEach(client -> sendNotification(notify, client));
+                                            dpnInfo.remove(fpcDpnId);
+
                                         }
+                                    } catch (Exception e) {
+                                        log.error(ExceptionUtils.getFullStackTrace(e));
                                     }
                                 }
                         );
