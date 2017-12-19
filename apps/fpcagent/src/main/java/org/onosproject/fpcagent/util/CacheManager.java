@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Stream;
 
 import static org.onosproject.fpcagent.util.FpcUtil.getTenant;
 
@@ -118,7 +119,7 @@ public class CacheManager {
                                         log.debug("tenant {}", tenant);
                                         if (tenant.fpcTopology().dpns() != null) {
                                             return tenant.fpcTopology().dpns().stream()
-                                                    .filter(dpns -> s.equals(dpns.nodeId()+"/"+dpns.networkId()))
+                                                    .filter(dpns -> s.equals(dpns.nodeId() + "/" + dpns.networkId()))
                                                     .findFirst()
                                                     .map(Dpns::dpnId);
                                         }
@@ -135,6 +136,10 @@ public class CacheManager {
     public static CacheManager getInstance(FpcIdentity identity) {
         cacheInfo.putIfAbsent(identity, new CacheManager(identity));
         return cacheInfo.get(identity);
+    }
+
+    public static Stream<CacheManager> getCaches() {
+        return cacheInfo.values().stream();
     }
 
 }

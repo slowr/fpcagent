@@ -16,10 +16,6 @@
 
 package org.onosproject.fpcagent;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -29,19 +25,16 @@ import org.onlab.packet.Ip4Prefix;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.config.DynamicConfigStore;
 import org.onosproject.core.CoreService;
-import org.onosproject.core.IdGenerator;
 import org.onosproject.fpcagent.protocols.DpnCommunicationService;
 import org.onosproject.fpcagent.protocols.DpnNgicCommunicator;
 import org.onosproject.fpcagent.protocols.DpnP4Communicator;
 import org.onosproject.fpcagent.providers.CpProviderService;
 import org.onosproject.fpcagent.util.CacheManager;
 import org.onosproject.fpcagent.util.FpcUtil;
-import org.onosproject.fpcagent.workers.HTTPNotifier;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.device.DeviceStore;
-import org.onosproject.restconf.utils.RestconfUtils;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.DefaultConnectionInfo;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.P4DpnControlProtocol;
 import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.ZmqDpnControlProtocol;
@@ -95,8 +88,14 @@ import org.slf4j.LoggerFactory;
 import java.math.BigInteger;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.onosproject.fpcagent.util.Converter.convertContext;
 import static org.onosproject.fpcagent.util.FpcUtil.*;
@@ -134,13 +133,9 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
     private DeviceService deviceService;
 
     private InternalDeviceListener listener = new InternalDeviceListener();
-    private ConcurrentMap<ClientIdentifier, DefaultRegisterClientInput> clientInfo = Maps.newConcurrentMap();
-    private ConcurrentMap<FpcIdentity, HashSet<ClientIdentifier>> tenantInfo = Maps.newConcurrentMap();
-    private HashSet<FpcDpnId> dpnInfo = Sets.newHashSet();
 
     // FIXME configurable
     private ExecutorService executorService = Executors.newFixedThreadPool(25);
-    private IdGenerator notificationIds;
 
     @Activate
     protected void activate() {
@@ -989,28 +984,6 @@ public class FpcRpcManager implements FpcRpcService, IetfDmmFpcagentService, org
             log.debug("Time Elapsed {} ms", Duration.between(start, Instant.now()).toMillis());
             return new RpcOutput(status, dataNode.dataNodes().get(0));
         }, executorService).join();
-    }
-
-    private void sendNotification(DefaultYangAutoPrefixNotify notify, ClientIdentifier client) {
-        ResourceData dataNode = modelConverter.createDataNode(
-                DefaultModelObjectData.builder()
-                        .addModelObject(notify)
-                        .build()
-        );
-        ObjectNode jsonNodes = RestconfUtils.convertDataNodeToJson(notification, dataNode.dataNodes().get(0));
-        ObjectMapper mapper = new ObjectMapper();
-
-        try {
-            log.info("Sending HTTP notification {} to {}", notify, client);
-            HTTPNotifier.getInstance().send(
-                    new AbstractMap.SimpleEntry<>(
-                            clientInfo.get(client).endpointUri().toString(),
-                            mapper.writeValueAsString(jsonNodes)
-                    )
-            );
-        } catch (JsonProcessingException e) {
-            log.error(ExceptionUtils.getFullStackTrace(e));
-        }
     }
 
     public class InternalDeviceListener implements DeviceListener {

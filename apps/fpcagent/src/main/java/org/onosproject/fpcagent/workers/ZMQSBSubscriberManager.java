@@ -1,22 +1,37 @@
 package org.onosproject.fpcagent.workers;
 
-import javafx.util.Pair;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.onosproject.fpcagent.providers.DpnDeviceListener;
+import org.onosproject.fpcagent.util.CacheManager;
 import org.onosproject.fpcagent.util.FpcUtil;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ClientIdentifier;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.DefaultYangAutoPrefixNotify;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.NotificationId;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.OpIdentifier;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.yangautoprefixnotify.value.DefaultDownlinkDataNotification;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.yangautoprefixnotify.value.DownlinkDataNotification;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnId;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcIdentity;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.fpcidentity.FpcIdentityUnion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 
+import java.math.BigInteger;
+import java.util.AbstractMap;
 import java.util.Arrays;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.onosproject.fpcagent.protocols.DpnNgicCommunicator.*;
-import static org.onosproject.fpcagent.util.Converter.toInt;
+import static org.onosproject.fpcagent.util.Converter.*;
+import static org.onosproject.fpcagent.util.FpcUtil.notificationIds;
+import static org.onosproject.fpcagent.util.FpcUtil.sendNotification;
 
 public class ZMQSBSubscriberManager implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(ZMQSBSubscriberManager.class);
@@ -123,37 +138,46 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
             this.ctx = new ZContext();
         }
 
-//        /**
-//         * Ensures the session id is an unsigned 64 bit integer
-//         *
-//         * @param sessionId - session id received from the DPN
-//         * @return unsigned session id
-//         */
-//        private static BigInteger checkSessionId(BigInteger sessionId) {
-//            if (sessionId.compareTo(BigInteger.ZERO) < 0) {
-//                sessionId = sessionId.add(BigInteger.ONE.shiftLeft(64));
-//            }
-//            return sessionId;
-//        }
-//
-//        /**
-//         * Decodes a DownlinkDataNotification
-//         *
-//         * @param buf - message buffer
-//         * @param key - Concatenation of node id + / + network id
-//         * @return DownlinkDataNotification or null if it could not be successfully decoded
-//         */
-//        private static DownlinkDataNotification processDDN(byte[] buf, String key) {
-//            DownlinkDataNotification ddnB = new DefaultDownlinkDataNotification();
-//            ddnB.sessionId(checkSessionId(toBigInt(buf, 2)));
-//            ddnB.notificationMessageType(DOWNLINK_DATA_NOTIFICATION_STRING);
-//            ddnB.clientId(ClientIdentifier.of(FpcIdentity.of(FpcIdentityUnion.of(fromIntToLong(buf, 10)))));
-//            ddnB.opId(OpIdentifier.of(BigInteger.valueOf(fromIntToLong(buf, 14))));
-//            ddnB.notificationDpnId(uplinkDpnMap.get(key));
-//            return ddnB;
-//        }
+        /**
+         * Ensures the session id is an unsigned 64 bit integer
+         *
+         * @param sessionId - session id received from the DPN
+         * @return unsigned session id
+         */
+        private BigInteger checkSessionId(BigInteger sessionId) {
+            if (sessionId.compareTo(BigInteger.ZERO) < 0) {
+                sessionId = sessionId.add(BigInteger.ONE.shiftLeft(64));
+            }
+            return sessionId;
+        }
 
-        public Pair<Object, Object> decode(byte[] buf) {
+        /**
+         * Decodes a DownlinkDataNotification
+         *
+         * @param buf - message buffer
+         * @param key - Concatenation of node id + / + network id
+         * @return DownlinkDataNotification or null if it could not be successfully decoded
+         */
+        private DownlinkDataNotification processDDN(byte[] buf, String key) {
+            DownlinkDataNotification ddnB = new DefaultDownlinkDataNotification();
+            ddnB.sessionId(checkSessionId(toBigInt(buf, 2)));
+            ddnB.notificationMessageType("Downlink-Data-Notification");
+            ddnB.clientId(ClientIdentifier.of(FpcIdentity.of(FpcIdentityUnion.of(fromIntToLong(buf, 10)))));
+            ddnB.opId(OpIdentifier.of(BigInteger.valueOf(fromIntToLong(buf, 14))));
+            CacheManager.getCaches().forEach(
+                    cacheManager -> {
+                        try {
+                            Optional<FpcDpnId> fpcDpnId = cacheManager.nodeNetworkCache.get(key);
+                            fpcDpnId.ifPresent(ddnB::notificationDpnId);
+                        } catch (ExecutionException e) {
+                            log.error(ExceptionUtils.getFullStackTrace(e));
+                        }
+                    }
+            );
+            return ddnB;
+        }
+
+        public Map.Entry<Object, Object> decode(byte[] buf) {
             s11MsgType type;
             type = s11MsgType.getEnum(buf[1]);
             if (type.equals(s11MsgType.DDN)) {
@@ -161,7 +185,7 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
                 short networkIdLen = buf[19 + nodeIdLen];
                 String key = new String(Arrays.copyOfRange(buf, 19, 19 + nodeIdLen)) + "/" + new String(Arrays.copyOfRange(buf, 20 + nodeIdLen, 20 + nodeIdLen + networkIdLen));
 
-//                return uplinkDpnMap.get(key) == null ? null : new AbstractMap.SimpleEntry<>(uplinkDpnMap.get(key), processDDN(buf, key));
+                return new AbstractMap.SimpleEntry<>(processDDN(buf, key), null);
             } else if (type.equals(s11MsgType.DPN_STATUS_INDICATION)) {
                 DpnStatusIndication status;
 
@@ -177,7 +201,7 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
                     log.info("Bye {}", deviceId);
                     dpnDeviceListener.deviceRemoved(deviceId);
                 }
-                return new Pair<>(status, deviceId);
+                return new AbstractMap.SimpleEntry<>(status, deviceId);
             }
             return null;
         }
@@ -204,11 +228,15 @@ public class ZMQSBSubscriberManager implements AutoCloseable {
                         }
                         break;
                     default:
-                        Pair msg = decode(contents);
+                        Map.Entry msg = decode(contents);
                         if (msg != null) {
                             Object key = msg.getKey();
                             if (key instanceof DownlinkDataNotification) {
-                                // TODO handle DL notification
+                                DefaultYangAutoPrefixNotify notify = new DefaultYangAutoPrefixNotify();
+                                notify.notificationId(NotificationId.of(notificationIds.getNewId()));
+                                notify.timestamp(BigInteger.valueOf(System.currentTimeMillis()));
+                                notify.value((DownlinkDataNotification) key);
+                                sendNotification(notify , ((DownlinkDataNotification) key).clientId());
                             } else if (key instanceof DpnStatusIndication) {
                                 if (key.equals(DpnStatusIndication.HELLO)) {
                                     byte dpnTopic = FpcUtil.getTopicFromNode(msg.getValue().toString());

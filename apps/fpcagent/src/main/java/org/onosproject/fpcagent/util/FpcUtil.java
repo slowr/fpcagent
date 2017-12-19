@@ -16,21 +16,36 @@
 
 package org.onosproject.fpcagent.util;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.onosproject.config.DynamicConfigService;
 import org.onosproject.config.Filter;
+import org.onosproject.core.IdGenerator;
+import org.onosproject.fpcagent.workers.HTTPNotifier;
 import org.onosproject.net.Device;
 import org.onosproject.net.device.DeviceStore;
+import org.onosproject.restconf.utils.RestconfUtils;
+import org.onosproject.yang.gen.v1.fpc.rev20150105.fpc.registerclient.DefaultRegisterClientInput;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.ClientIdentifier;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.DefaultTenants;
+import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.DefaultYangAutoPrefixNotify;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.DefaultTenant;
 import org.onosproject.yang.gen.v1.ietfdmmfpcagent.rev20160803.ietfdmmfpcagent.tenants.TenantKeys;
+import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcDpnId;
 import org.onosproject.yang.gen.v1.ietfdmmfpcbase.rev20160803.ietfdmmfpcbase.FpcIdentity;
 import org.onosproject.yang.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.AbstractMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentMap;
 
 import static org.onosproject.net.DeviceId.deviceId;
 
@@ -54,6 +69,12 @@ public class FpcUtil {
     public static ResourceId deregisterClient;
     public static ResourceId module;
     public static ResourceId notification;
+
+    public static IdGenerator notificationIds;
+
+    public static final ConcurrentMap<ClientIdentifier, DefaultRegisterClientInput> clientInfo = Maps.newConcurrentMap();
+    public static final ConcurrentMap<FpcIdentity, HashSet<ClientIdentifier>> tenantInfo = Maps.newConcurrentMap();
+    public static final HashSet<FpcDpnId> dpnInfo = Sets.newHashSet();
 
     /**
      * Returns resource id from model converter.
@@ -274,5 +295,27 @@ public class FpcUtil {
         dataNode.dataNodes().forEach(
                 node -> dynamicConfigService.updateNode(dataNode.resourceId(), node)
         );
+    }
+
+    public static void sendNotification(DefaultYangAutoPrefixNotify notify, ClientIdentifier client) {
+        ResourceData dataNode = modelConverter.createDataNode(
+                DefaultModelObjectData.builder()
+                        .addModelObject(notify)
+                        .build()
+        );
+        ObjectNode jsonNodes = RestconfUtils.convertDataNodeToJson(module, dataNode.dataNodes().get(0));
+        ObjectMapper mapper = new ObjectMapper();
+
+        try {
+            log.info("Sending HTTP notification {} to {}", notify, client);
+            HTTPNotifier.getInstance().send(
+                    new AbstractMap.SimpleEntry<>(
+                            clientInfo.get(client).endpointUri().toString(),
+                            mapper.writeValueAsString(jsonNodes)
+                    )
+            );
+        } catch (JsonProcessingException e) {
+            log.error(ExceptionUtils.getFullStackTrace(e));
+        }
     }
 }
